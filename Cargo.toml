@@ -1,0 +1,46 @@
+[package]
+name = "pgfdb"
+version = "0.0.0"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib", "lib"]
+
+[[bin]]
+name = "pgrx_embed_pgfdb"
+path = "./src/bin/pgrx_embed.rs"
+
+[features]
+default = ["pg17", "foundationdb/fdb-7_3"]
+pg12 = ["pgrx/pg12", "pgrx-tests/pg12"]
+pg13 = ["pgrx/pg13", "pgrx-tests/pg13"]
+pg14 = ["pgrx/pg14", "pgrx-tests/pg14"]
+pg15 = ["pgrx/pg15", "pgrx-tests/pg15"]
+pg16 = ["pgrx/pg16", "pgrx-tests/pg16"]
+pg17 = ["pgrx/pg17", "pgrx-tests/pg17"]
+pg_test = ["foundationdb/fdb-7_3"]
+
+[dependencies]
+pgrx = "=0.12.9"
+pgrx-sql-entity-graph = "=0.12.9"
+foundationdb = "0.9.1"
+tokio = { version = "1", features = ["full"] }
+bytes = "*"
+futures = "*"
+pollster = "0.3.0"
+rand = "*"
+serde = "*"
+serde_cbor = "*"
+
+[dev-dependencies]
+pgrx-tests = "=0.12.9"
+
+[profile.dev]
+panic = "unwind"
+
+[profile.release]
+panic = "unwind"
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+rpath = true
