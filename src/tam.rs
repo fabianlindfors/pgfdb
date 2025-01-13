@@ -1,8 +1,9 @@
 use std::ptr::addr_of_mut;
 
+mod tts;
+
 use pgrx::{
     callconv::BoxRet,
-    extension_sql,
     itemptr::item_pointer_get_block_number,
     log, name_data_to_str, pg_extern, pg_guard,
     pg_sys::{
@@ -129,8 +130,8 @@ static mut FDB_TABLE_AM_ROUTINE: TableAmRoutine = TableAmRoutine {
 
 #[pg_guard]
 unsafe extern "C" fn slot_callbacks(rel: Relation) -> *const TupleTableSlotOps {
-    log!("TAM: Slot callbacks");
-    &TTSOpsVirtual
+    log!("TAM: Using custom slot callbacks");
+    &tts::CUSTOM_SLOT_OPS
 }
 
 #[pg_guard]
