@@ -145,16 +145,9 @@ unsafe extern "C" fn scan_begin(
 
     // Allocate the custom scan descriptor
     let mut scan = PgBox::<scan::FdbScanDesc>::alloc();
+    
+    scan.init(rel, snapshot, nkeys, key, pscan, flags);
 
-    // Initialize the base TableScanDescData fields
-    scan.rs_base.rs_rd = rel;
-    scan.rs_base.rs_snapshot = snapshot;
-    scan.rs_base.rs_nkeys = nkeys;
-    scan.rs_base.rs_key = key;
-    scan.rs_base.rs_parallel = pscan;
-    scan.rs_base.rs_flags = flags;
-
-    // Return the scan descriptor cast to the base type
     scan.into_pg() as *mut TableScanDescData
 }
 
