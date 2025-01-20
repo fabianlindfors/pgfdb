@@ -1,5 +1,6 @@
 use std::{ptr::addr_of_mut, slice::from_raw_parts};
 
+mod scan;
 mod tts;
 
 use foundationdb::tuple::pack;
@@ -56,11 +57,6 @@ unsafe impl SqlTranslatable for TableAmHandler {
     fn return_sql() -> Result<Returns, ReturnsError> {
         Ok(Returns::One(SqlMapping::literal("table_am_handler")))
     }
-}
-
-#[repr(C)]
-pub struct FdbScanDesc {
-    pub rs_base: TableScanDescData,
 }
 
 #[repr(C)]
@@ -146,10 +142,10 @@ unsafe extern "C" fn scan_begin(
     flags: uint32,
 ) -> TableScanDesc {
     log!("TAM: Scan begin with nkeys {nkeys}");
-    
+
     // Allocate the custom scan descriptor
-    let mut scan = PgBox::<FdbScanDesc>::alloc();
-    
+    let mut scan = PgBox::<scan::FdbScanDesc>::alloc();
+
     // Initialize the base TableScanDescData fields
     scan.rs_base.rs_rd = rel;
     scan.rs_base.rs_snapshot = snapshot;
@@ -157,15 +153,6 @@ unsafe extern "C" fn scan_begin(
     scan.rs_base.rs_key = key;
     scan.rs_base.rs_parallel = pscan;
     scan.rs_base.rs_flags = flags;
-    scan.rs_base.rs_strategy = std::ptr::null_mut();
-    scan.rs_base.rs_startblock = 0;
-    scan.rs_base.rs_numblocks = 0;
-    scan.rs_base.rs_inited = false;
-    scan.rs_base.rs_ctup.t_self.ip_blkid.bi_hi = 0;
-    scan.rs_base.rs_ctup.t_self.ip_blkid.bi_lo = 0;
-    scan.rs_base.rs_ctup.t_self.ip_posid = 0;
-    scan.rs_base.rs_cbuf = 0;
-    scan.rs_base.rs_cblock = 0;
 
     // Return the scan descriptor cast to the base type
     scan.into_pg() as *mut TableScanDescData
@@ -174,7 +161,7 @@ unsafe extern "C" fn scan_begin(
 #[pg_guard]
 unsafe extern "C" fn scan_end(scan: TableScanDesc) {
     log!("TAM: Scan end");
-    let mut _fscan = scan as *mut FdbScanDesc;
+    let mut _fscan = scan as *mut scan::FdbScanDesc;
 }
 
 #[pg_guard]
@@ -194,7 +181,7 @@ unsafe extern "C" fn scan_get_next_slot(
     _direction: ScanDirection::Type,
     _slot: *mut TupleTableSlot,
 ) -> bool {
-    let mut _fscan = scan as *mut FdbScanDesc;
+    let mut _fscan = scan as *mut scan::FdbScanDesc;
 
     // if let Some(clear) = (*(*slot).tts_ops).clear {
     //     clear(slot);
