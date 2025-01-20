@@ -138,15 +138,37 @@ unsafe extern "C" fn slot_callbacks(_rel: Relation) -> *const TupleTableSlotOps 
 
 #[pg_guard]
 unsafe extern "C" fn scan_begin(
-    _rel: Relation,
-    _snapshot: Snapshot,
+    rel: Relation,
+    snapshot: Snapshot,
     nkeys: ::std::os::raw::c_int,
-    _key: *mut ScanKeyData,
-    _pscan: ParallelTableScanDesc,
-    _flags: uint32,
+    key: *mut ScanKeyData,
+    pscan: ParallelTableScanDesc,
+    flags: uint32,
 ) -> TableScanDesc {
     log!("TAM: Scan begin with nkeys {nkeys}");
-    todo!()
+    
+    // Allocate the custom scan descriptor
+    let mut scan = PgBox::<FdbScanDesc>::alloc();
+    
+    // Initialize the base TableScanDescData fields
+    scan.rs_base.rs_rd = rel;
+    scan.rs_base.rs_snapshot = snapshot;
+    scan.rs_base.rs_nkeys = nkeys;
+    scan.rs_base.rs_key = key;
+    scan.rs_base.rs_parallel = pscan;
+    scan.rs_base.rs_flags = flags;
+    scan.rs_base.rs_strategy = std::ptr::null_mut();
+    scan.rs_base.rs_startblock = 0;
+    scan.rs_base.rs_numblocks = 0;
+    scan.rs_base.rs_inited = false;
+    scan.rs_base.rs_ctup.t_self.ip_blkid.bi_hi = 0;
+    scan.rs_base.rs_ctup.t_self.ip_blkid.bi_lo = 0;
+    scan.rs_base.rs_ctup.t_self.ip_posid = 0;
+    scan.rs_base.rs_cbuf = 0;
+    scan.rs_base.rs_cblock = 0;
+
+    // Return the scan descriptor cast to the base type
+    scan.into_pg() as *mut TableScanDescData
 }
 
 #[pg_guard]
