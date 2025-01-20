@@ -142,13 +142,7 @@ unsafe extern "C" fn scan_begin(
     flags: uint32,
 ) -> TableScanDesc {
     log!("TAM: Scan begin with nkeys {nkeys}");
-
-    // Allocate the custom scan descriptor
-    let mut scan = PgBox::<scan::FdbScanDesc>::alloc();
-    
-    scan.init(rel, snapshot, nkeys, key, pscan, flags);
-
-    scan.into_pg() as *mut TableScanDescData
+    scan::FdbScanDesc::init(rel, snapshot, nkeys, key, pscan, flags)
 }
 
 #[pg_guard]

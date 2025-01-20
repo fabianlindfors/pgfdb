@@ -9,19 +9,22 @@ pub struct FdbScanDesc {
 
 impl FdbScanDesc {
     pub fn init(
-        &mut self,
         rel: Relation,
         snapshot: Snapshot,
         nkeys: ::std::os::raw::c_int,
         key: *mut ScanKeyData,
         pscan: ParallelTableScanDesc,
         flags: uint32,
-    ) {
-        self.rs_base.rs_rd = rel;
-        self.rs_base.rs_snapshot = snapshot;
-        self.rs_base.rs_nkeys = nkeys;
-        self.rs_base.rs_key = key;
-        self.rs_base.rs_parallel = pscan;
-        self.rs_base.rs_flags = flags;
+    ) -> TableScanDesc {
+        let mut scan = PgBox::<FdbScanDesc>::alloc();
+        
+        scan.rs_base.rs_rd = rel;
+        scan.rs_base.rs_snapshot = snapshot;
+        scan.rs_base.rs_nkeys = nkeys;
+        scan.rs_base.rs_key = key;
+        scan.rs_base.rs_parallel = pscan;
+        scan.rs_base.rs_flags = flags;
+
+        scan.into_pg() as *mut TableScanDescData
     }
 }
