@@ -3,6 +3,7 @@ use futures::{
     stream::{empty, BoxStream},
     Stream, StreamExt,
 };
+use std::mem::MaybeUninit;
 use pgrx::{
     pg_sys::{
         uint32, ParallelTableScanDesc, Relation, ScanKeyData, Snapshot, TableScanDesc,
@@ -42,11 +43,10 @@ impl FdbScanDesc {
         let range_option = RangeOption::from(table_subspace.range());
         let stream = txn.get_ranges_keyvalues(range_option, false).boxed();
 
-        // We can't just assign with `scan.values = ...` because `scan.values is uninitialised and Rust will try to drop
-        // the existing non-sense value, causing undefined behaviour
+        // Using MaybeUninit to safely initialize the BoxStream field
         unsafe {
             let scan_pointer = scan.as_ptr();
-            (*scan_pointer).values = stream;
+            std::ptr::write(&mut (*scan_pointer).values, stream);
         }
 
         scan.into_pg() as *mut TableScanDescData
