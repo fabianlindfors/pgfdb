@@ -1,23 +1,24 @@
+use std::ptr;
+
+use foundationdb::future::FdbValue;
 use pgrx::{
-    pg_guard,
+    log, pg_guard,
     pg_sys::{Datum, HeapTuple, MinimalTuple, TupleTableSlot, TupleTableSlotOps, TTS_FLAG_EMPTY},
 };
 
 #[repr(C)]
-pub struct CustomSlot {
+pub struct FdbTupleTableSlot {
     base: TupleTableSlot,
-    custom_data: *mut CustomData,
+    data: FdbTuple,
 }
 
-pub struct CustomData {
-    // Add your custom data fields here
-    values: Vec<Datum>,
-    nulls: Vec<bool>,
+pub struct FdbTuple {
+    value: Option<FdbValue>,
 }
 
 // More details in https://github.com/postgres/postgres/blob/master/src/include/executor/tuptable.h
 pub static CUSTOM_SLOT_OPS: TupleTableSlotOps = TupleTableSlotOps {
-    base_slot_size: std::mem::size_of::<CustomSlot>(),
+    base_slot_size: std::mem::size_of::<FdbTupleTableSlot>(),
     init: Some(custom_init),
     release: Some(custom_release),
     clear: Some(custom_clear),
@@ -36,32 +37,36 @@ pub static CUSTOM_SLOT_OPS: TupleTableSlotOps = TupleTableSlotOps {
 /// The slot starts empty (TTS_FLAG_EMPTY) with no valid values.
 #[pg_guard]
 unsafe extern "C" fn custom_init(slot: *mut TupleTableSlot) {
+    log!("TTS: Init");
+
     (*slot).tts_flags = TTS_FLAG_EMPTY as u16;
     (*slot).tts_nvalid = 0;
     (*slot).tts_values = std::ptr::null_mut();
     (*slot).tts_isnull = std::ptr::null_mut();
 
-    let custom_slot = slot as *mut CustomSlot;
-    (*custom_slot).custom_data = Box::into_raw(Box::new(CustomData {
-        values: Vec::new(),
-        nulls: Vec::new(),
-    }));
+    let custom_slot = slot as *mut FdbTupleTableSlot;
+    (*custom_slot).data = FdbTuple { value: None };
 }
 
 /// Clean up and free resources when slot is destroyed.
 /// Responsible for freeing the custom_data but not the slot itself.
 #[pg_guard]
 unsafe extern "C" fn custom_release(slot: *mut TupleTableSlot) {
-    let custom_slot = slot as *mut CustomSlot;
-    if !(*custom_slot).custom_data.is_null() {
-        drop(Box::from_raw((*custom_slot).custom_data));
-    }
+    log!("TTS: Release");
+
+    let custom_slot = slot as *mut FdbTupleTableSlot;
+
+    // Drop the slot to release the FdbValue it holds a reference to
+    let custom_slot_full = ptr::read(custom_slot);
+    drop(custom_slot_full);
 }
 
 /// Clear the contents of the slot but keep the tuple descriptor.
 /// Sets the slot to empty state and resets the number of valid values.
 #[pg_guard]
 unsafe extern "C" fn custom_clear(slot: *mut TupleTableSlot) {
+    log!("TTS: Clear");
+
     (*slot).tts_flags = TTS_FLAG_EMPTY as u16;
     (*slot).tts_nvalid = 0;
 }
@@ -70,7 +75,8 @@ unsafe extern "C" fn custom_clear(slot: *mut TupleTableSlot) {
 /// May be called with natts > number of available attributes.
 /// Must set tts_nvalid to actual number of valid values returned.
 #[pg_guard]
-unsafe extern "C" fn custom_getsomeattrs(slot: *mut TupleTableSlot, natts: i32) {
+unsafe extern "C" fn custom_getsomeattrs(_slot: *mut TupleTableSlot, _nattss: i32) {
+    log!("TTS: Get some attributes");
     // Implement attribute loading logic here
 }
 
@@ -79,10 +85,11 @@ unsafe extern "C" fn custom_getsomeattrs(slot: *mut TupleTableSlot, natts: i32) 
 /// Currently returns null for all system attributes.
 #[pg_guard]
 unsafe extern "C" fn custom_getsysattr(
-    slot: *mut TupleTableSlot,
-    attnum: i32,
+    _slot: *mut TupleTableSlot,
+    _attnum: i32,
     isnull: *mut bool,
 ) -> Datum {
+    log!("TTS: Get system attribute");
     *isnull = true;
     Datum::from(0)
 }
@@ -91,15 +98,19 @@ unsafe extern "C" fn custom_getsysattr(
 /// After this call, slot should not depend on buffers, memory contexts etc.
 /// No-op for this implementation since data is already self-contained.
 #[pg_guard]
-unsafe extern "C" fn custom_materialize(slot: *mut TupleTableSlot) {}
+unsafe extern "C" fn custom_materialize(_slot: *mut TupleTableSlot) {
+    log!("TTS: Materialise");
+}
 
 /// Copy source slot's contents into destination slot's context.
 /// Slots must have same number of attributes.
 /// Currently only copies flags and number of valid values.
 #[pg_guard]
 unsafe extern "C" fn custom_copyslot(dst: *mut TupleTableSlot, src: *mut TupleTableSlot) {
+    log!("TTS: Copy slot");
     (*dst).tts_flags = (*src).tts_flags;
     (*dst).tts_nvalid = (*src).tts_nvalid;
+    (*dst).tts_values = (*src).tts_values;
 }
 
 /// Get the value and null flag for a specific attribute by number.
@@ -107,44 +118,36 @@ unsafe extern "C" fn custom_copyslot(dst: *mut TupleTableSlot, src: *mut TupleTa
 #[pg_guard]
 unsafe extern "C" fn custom_getattr(
     slot: *mut TupleTableSlot,
-    attnum: i32,
-    isnull: *mut bool,
+    _attnum: i32,
+    _isnull: *mut bool,
 ) -> Datum {
-    let custom_slot = slot as *mut CustomSlot;
-    let custom_data = &*(*custom_slot).custom_data;
-
-    let idx = (attnum - 1) as usize;
-    if idx < custom_data.values.len() {
-        *isnull = custom_data.nulls[idx];
-        custom_data.values[idx]
-    } else {
-        *isnull = true;
-        Datum::from(0)
-    }
+    log!("TTS: Get attribute");
+    let _custom_slot = slot as *mut FdbTupleTableSlot;
+    Datum::from(0)
 }
 
 /// Get the null flag for a specific attribute by number.
 /// Returns true for out of range attributes.
 #[pg_guard]
-unsafe extern "C" fn custom_get_isnull(slot: *mut TupleTableSlot, attnum: i32) -> bool {
-    let custom_slot = slot as *mut CustomSlot;
-    let custom_data = &*(*custom_slot).custom_data;
-
-    let idx = (attnum - 1) as usize;
-    custom_data.nulls.get(idx).copied().unwrap_or(true)
+unsafe extern "C" fn custom_get_isnull(slot: *mut TupleTableSlot, _attnum: i32) -> bool {
+    log!("TTS: Get is null");
+    let _custom_slot = slot as *mut FdbTupleTableSlot;
+    false
 }
 
 /// Get direct access to the slot's values array.
 /// Used for bulk access to attribute values.
 #[pg_guard]
 unsafe extern "C" fn custom_get_values(slot: *mut TupleTableSlot) -> *mut Datum {
+    log!("TTS: Get values");
     (*slot).tts_values
 }
 
 /// Check if tuple was created by current transaction.
 /// Returns false since custom slots don't track transaction visibility.
 #[pg_guard]
-unsafe extern "C" fn custom_is_current_xact_tuple(slot: *mut TupleTableSlot) -> bool {
+unsafe extern "C" fn custom_is_current_xact_tuple(_slot: *mut TupleTableSlot) -> bool {
+    log!("TTS: Is current xact tuple");
     // For custom slots, we typically return false as we don't track transaction visibility
     false
 }
@@ -152,7 +155,8 @@ unsafe extern "C" fn custom_is_current_xact_tuple(slot: *mut TupleTableSlot) -> 
 /// Return a heap tuple "owned" by the slot.
 /// Returns null since custom slots don't store heap tuples.
 #[pg_guard]
-unsafe extern "C" fn custom_get_heap_tuple(slot: *mut TupleTableSlot) -> HeapTuple {
+unsafe extern "C" fn custom_get_heap_tuple(_slot: *mut TupleTableSlot) -> HeapTuple {
+    log!("TTS: Get heap tuple");
     // We don't store heap tuples directly in our custom slot
     std::ptr::null_mut()
 }
@@ -160,7 +164,8 @@ unsafe extern "C" fn custom_get_heap_tuple(slot: *mut TupleTableSlot) -> HeapTup
 /// Return a minimal tuple "owned" by the slot.
 /// Returns null since custom slots don't store minimal tuples.
 #[pg_guard]
-unsafe extern "C" fn custom_get_minimal_tuple(slot: *mut TupleTableSlot) -> MinimalTuple {
+unsafe extern "C" fn custom_get_minimal_tuple(_slot: *mut TupleTableSlot) -> MinimalTuple {
+    log!("TTS: Get mininmal tuple");
     // We don't store minimal tuples in our custom slot
     std::ptr::null_mut()
 }
@@ -168,7 +173,8 @@ unsafe extern "C" fn custom_get_minimal_tuple(slot: *mut TupleTableSlot) -> Mini
 /// Return a copy of slot contents as a minimal tuple.
 /// Returns null since custom slots don't support minimal tuples.
 #[pg_guard]
-unsafe extern "C" fn custom_copy_minimal_tuple(slot: *mut TupleTableSlot) -> MinimalTuple {
+unsafe extern "C" fn custom_copy_minimal_tuple(_slot: *mut TupleTableSlot) -> MinimalTuple {
+    log!("TTS: Copy minimal tuple");
     // We don't support minimal tuples in our custom slot
     std::ptr::null_mut()
 }
@@ -176,7 +182,8 @@ unsafe extern "C" fn custom_copy_minimal_tuple(slot: *mut TupleTableSlot) -> Min
 /// Return a copy of slot contents as a heap tuple.
 /// Returns null since custom slots don't support heap tuples.
 #[pg_guard]
-unsafe extern "C" fn custom_copy_heap_tuple(slot: *mut TupleTableSlot) -> HeapTuple {
+unsafe extern "C" fn custom_copy_heap_tuple(_slot: *mut TupleTableSlot) -> HeapTuple {
+    log!("TTS: Copy heap tuple");
     // We don't support heap tuples in our custom slot
     std::ptr::null_mut()
 }
