@@ -1,8 +1,8 @@
 use std::ptr::addr_of_mut;
 
 use pg_sys::{
-    Datum, IndexAmRoutine, IndexBuildResult, IndexInfo, IndexScanDesc, IndexUniqueCheck,
-    InvalidOid, ItemPointer, Relation, ScanDirection, ScanKey,
+    Datum, IndexAmRoutine, IndexBuildResult, IndexInfo, IndexScanDesc, IndexScanDescData,
+    IndexUniqueCheck, InvalidOid, ItemPointer, Relation, ScanDirection, ScanKey,
 };
 use pgrx::callconv::BoxRet;
 use pgrx::prelude::*;
@@ -85,18 +85,39 @@ unsafe extern "C" fn aminsert(
     true
 }
 
+#[repr(C)]
+struct FdbIndexScanDesc {
+    // Must be first field to ensure proper casting
+    base: IndexScanDescData,
+    // Add fields needed for FDB scanning
+    initialized: bool,
+}
+
 // Begin an index scan
 unsafe extern "C" fn ambeginscan(
-    _index_relation: Relation,
-    _nkeys: ::std::os::raw::c_int,
-    _norderbys: ::std::os::raw::c_int,
+    index_relation: Relation,
+    nkeys: ::std::os::raw::c_int,
+    norderbys: ::std::os::raw::c_int,
 ) -> IndexScanDesc {
     log!("IAM: Begin scan");
 
-    // TODO: Initialize scan state
-    // 1. Create FDB range based on scan keys
-    // 2. Setup iterator
-    std::ptr::null_mut()
+    let mut scan = PgBox::<FdbIndexScanDesc>::alloc();
+    
+    // Initialize the base IndexScanDescData
+    scan.base.indexRelation = index_relation;
+    scan.base.numberOfKeys = nkeys;
+    scan.base.numberOfOrderBys = norderbys;
+    scan.base.keyData = std::ptr::null_mut();
+    scan.base.orderByData = std::ptr::null_mut();
+    scan.base.xs_snapshot = std::ptr::null_mut();
+    scan.base.xs_want_itup = false;
+    scan.base.xs_temp_snap = false;
+    
+    // Initialize our custom fields
+    scan.initialized = false;
+
+    // Convert to IndexScanDesc (which is just *mut IndexScanDescData)
+    scan.into_pg() as IndexScanDesc
 }
 
 // Fetch next tuple from scan
