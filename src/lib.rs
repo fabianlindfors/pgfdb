@@ -1,18 +1,30 @@
+#![feature(noop_waker)]
+
 use std::env;
 
+use pg_sys::RegisterXactCallback;
 use pgrx::prelude::*;
 
 ::pgrx::pg_module_magic!();
 
-mod database;
+mod fdb;
 mod health;
+mod subspace;
 mod tam;
+mod transaction;
 
 #[pg_guard]
 pub extern "C" fn _PG_init() {
-    database::init_database();
-
     env::set_var("RUST_BACKTRACE", "1");
+
+    fdb::init();
+
+    unsafe {
+        RegisterXactCallback(
+            Some(transaction::transaction_callback),
+            std::ptr::null_mut(),
+        );
+    }
 }
 
 #[cfg(any(test, feature = "pg_test"))]
@@ -25,14 +37,51 @@ mod tests {
         Spi::run("CREATE TABLE test (id INTEGER) USING pgfdb").unwrap();
     }
 
-    // #[pg_test]
-    // fn insert() {
-    //     Spi::run("CREATE TABLE test (id INTEGER) USING pgfdb").unwrap();
+    #[pg_test]
+    fn insert() {
+        Spi::run("CREATE TABLE test (id INTEGER) USING pgfdb").unwrap();
 
-    //     Spi::run("INSERT INTO test (id) VALUES (10)").unwrap();
-    //     let result = Spi::get_one::<i64>("SELECT id FROM test LIMIT 1").unwrap();
-    //     assert_eq!(Some(10), result);
-    // }
+        Spi::run("INSERT INTO test (id) VALUES (10)").unwrap();
+    }
+
+    #[pg_test]
+    fn select() {
+        Spi::run("CREATE TABLE test (id INTEGER) USING pgfdb").unwrap();
+
+        Spi::run("INSERT INTO test (id) VALUES (1), (2), (3), (4)").unwrap();
+
+        let result: i32 = Spi::get_one("SELECT id FROM test WHERE id = 3")
+            .unwrap()
+            .unwrap();
+        assert_eq!(3, result);
+    }
+
+    #[pg_test]
+    fn aggregates() {
+        Spi::run("CREATE TABLE test (id INTEGER) USING pgfdb").unwrap();
+
+        Spi::run("INSERT INTO test (id) VALUES (1), (2), (3), (4)").unwrap();
+
+        let (count, avg): (Option<i64>, Option<pgrx::AnyNumeric>) =
+            Spi::get_two("SELECT COUNT(*), AVG(id) FROM test").unwrap();
+        assert_eq!(4, count.unwrap());
+        assert_eq!("2.5", avg.unwrap().normalize());
+    }
+
+    #[pg_test]
+    fn index() {
+        // Create table with a primary key index (will be regular Postgres index)
+        Spi::run("CREATE TABLE test (id INTEGER PRIMARY KEY) USING pgfdb").unwrap();
+        Spi::run("INSERT INTO test (id) VALUES (1), (2), (3), (4)").unwrap();
+
+        // Disable sequential scans to force index use
+        Spi::run("SET enable_seqscan = off").unwrap();
+
+        let count: i64 = Spi::get_one("SELECT COUNT(*) FROM test WHERE id > 2")
+            .unwrap()
+            .unwrap();
+        assert_eq!(2, count);
+    }
 }
 
 /// This module is required by `cargo pgrx test` invocations.

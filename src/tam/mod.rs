@@ -1,20 +1,19 @@
-use std::{ptr::addr_of_mut, slice::from_raw_parts};
+use std::ptr::addr_of_mut;
 
+mod coding;
 mod scan;
-mod tts;
 
-use foundationdb::tuple::pack;
 use pgrx::{
     callconv::BoxRet,
-    itemptr::item_pointer_get_block_number,
+    itemptr::{item_pointer_get_block_number_no_check, item_pointer_set_all},
     log, name_data_to_str, pg_extern, pg_guard,
     pg_sys::{
         int32, uint32, uint64, uint8, BlockNumber, BufferAccessStrategy, BulkInsertStateData,
         CommandId, Datum, ForkNumber, IndexBuildCallback, IndexFetchTableData, IndexInfo,
         ItemPointer, LockTupleMode, LockWaitPolicy, MultiXactId, ParallelTableScanDesc, ReadStream,
         RelFileLocator, Relation, SampleScanState, ScanDirection, ScanKeyData, Size, Snapshot,
-        TM_FailureData, TM_IndexDeleteOp, TM_Result, TU_UpdateIndexes, TableAmRoutine,
-        TableScanDesc, TableScanDescData, TransactionId, TupleTableSlot, TupleTableSlotOps,
+        TM_FailureData, TM_IndexDeleteOp, TM_Result, TTSOpsVirtual, TU_UpdateIndexes,
+        TableAmRoutine, TableScanDesc, TransactionId, TupleTableSlot, TupleTableSlotOps,
         VacuumParams, ValidateIndexState,
     },
     PgBox,
@@ -22,7 +21,10 @@ use pgrx::{
 use pgrx_sql_entity_graph::metadata::{
     ArgumentError, Returns, ReturnsError, SqlMapping, SqlTranslatable,
 };
+use pollster::FutureExt;
 use rand::Rng;
+
+use crate::subspace;
 
 #[pg_extern(sql = "
     -- We need to use custom SQL to define our TAM handler function as Postgres requires the function signature
@@ -129,7 +131,7 @@ static mut FDB_TABLE_AM_ROUTINE: TableAmRoutine = TableAmRoutine {
 #[pg_guard]
 unsafe extern "C" fn slot_callbacks(_rel: Relation) -> *const TupleTableSlotOps {
     log!("TAM: Using custom slot callbacks");
-    &tts::CUSTOM_SLOT_OPS
+    &TTSOpsVirtual
 }
 
 #[pg_guard]
@@ -162,24 +164,25 @@ unsafe extern "C" fn rescan(
 ) {
 }
 
-#[pg_guard]
 unsafe extern "C" fn scan_get_next_slot(
-    scan: TableScanDesc,
+    raw_scan: TableScanDesc,
     _direction: ScanDirection::Type,
-    _slot: *mut TupleTableSlot,
+    slot: *mut TupleTableSlot,
 ) -> bool {
-    let mut _fscan = scan as *mut scan::FdbScanDesc;
+    // log!("TAM: Scan get next slot, slot={:p}", slot);
+    let scan = (raw_scan as *mut scan::FdbScanDesc).as_mut().unwrap();
 
-    // if let Some(clear) = (*(*slot).tts_ops).clear {
-    //     clear(slot);
-    // }
+    // Load next value from the ongoing scan
+    let Some(value) = scan.next_value() else {
+        // No value means there are no more tuples in the scan
+        return false;
+    };
 
-    // let result = database::get_next_row(fscan, slot);
-    // if result.is_none() {
-    //     return false;
-    // }
+    // Decode the value into our intermediate data structure
+    let tuple = coding::Tuple::deserialize(value.value());
 
-    // ExecStoreVirtualTuple(slot);
+    // Store the decoded values on the TTS
+    tuple.load_into_tts(slot.as_mut().unwrap());
 
     return true;
 }
@@ -190,6 +193,7 @@ unsafe extern "C" fn scan_set_tidrange(
     _mintid: ItemPointer,
     _maxtid: ItemPointer,
 ) {
+    log!("TAM: Scan set TID range");
 }
 
 #[pg_guard]
@@ -198,6 +202,7 @@ unsafe extern "C" fn scan_get_next_slot_tidrange(
     _direction: ScanDirection::Type,
     _slot: *mut TupleTableSlot,
 ) -> bool {
+    log!("TAM: Scan get next slot TID range");
     return false;
 }
 
@@ -224,29 +229,28 @@ unsafe extern "C" fn index_fetch_end(data: *mut IndexFetchTableData) {
 
 #[pg_guard]
 unsafe extern "C" fn index_fetch_tuple(
-    _scan: *mut IndexFetchTableData,
+    scan: *mut IndexFetchTableData,
     tid: ItemPointer,
     _snapshot: Snapshot,
     slot: *mut TupleTableSlot,
     _call_again: *mut bool,
     _all_dead: *mut bool,
 ) -> bool {
-    log!(
-        "TAM: Fetch tuple, id = {:?}, offset = {:?}",
-        (*tid).ip_blkid,
-        (*tid).ip_posid
-    );
-    if let Some(clear) = (*(*slot).tts_ops).clear {
-        clear(slot);
-    }
+    log!("TAM: Fetch tuple, id = {:?}", (*tid).ip_blkid);
 
-    // database::get_row_by_id(
-    //     (*scan).rel,
-    //     item_pointer_get_block_number(tid).try_into().unwrap(),
-    //     slot,
-    // );
+    let id = item_pointer_get_block_number_no_check(*tid);
+    let key = subspace::table((*(*scan).rel).rd_id).pack(&id);
 
-    // ExecStoreVirtualTuple(slot);
+    let txn = crate::transaction::get_transaction();
+    let Some(value) = txn.get(&key, false).block_on().unwrap() else {
+        return false;
+    };
+
+    // Decode the value into our intermediate data structure
+    let tuple = coding::Tuple::deserialize(&value);
+
+    // Store the decoded values on the TTS
+    tuple.load_into_tts(slot.as_mut().unwrap());
 
     return true;
 }
@@ -254,28 +258,35 @@ unsafe extern "C" fn index_fetch_tuple(
 #[pg_guard]
 unsafe extern "C" fn tuple_insert(
     rel: Relation,
-    slot_pointer: *mut TupleTableSlot,
+    slot: *mut TupleTableSlot,
     _cid: CommandId,
     _options: ::std::os::raw::c_int,
     _bistate: *mut BulkInsertStateData,
 ) {
-    let tuple_desc = (*rel).rd_att;
-    let slot = *slot_pointer;
+    // let slot = slot_pointer as *mut tts::FdbTupleTableSlot;
 
-    log!("Inserting tuple, nvalid={}", slot.tts_nvalid);
-
-    let values = from_raw_parts(slot.tts_values, slot.tts_nvalid.try_into().unwrap());
-    log!("First value = {:?}", values[0].value());
-
-    let txn = crate::transaction::get_transaction();
-
+    // Generate random ID which we will use as a Postgres item pointer
+    // An item pointers stores an unsigned 48 integer (32-bit block number and 16-bit offset)
+    // We randomly generate both of these and then combine them to a random item pointer ID
     let mut rng = rand::thread_rng();
-    let id = rng.gen_range(0..=i32::MAX);
+    let id = rng.gen_range(0..=u32::MAX);
 
-    let row_key = pack(&("tables", (*tuple_desc).tdtypeid.as_u32(), id));
-    let value = pack(&(values[0].value()));
+    // Store the random ID as an item pointer to the slot
+    // Offset can't be 0 so we set that to 1
+    item_pointer_set_all(&mut (*slot).tts_tid, id, 1);
 
-    txn.set(&row_key, &value);
+    // log!(
+    //     "Inserting tuple in table={} with id={}",
+    //     (*rel).rd_id.as_u32(),
+    //     id
+    // );
+
+    let tuple = coding::Tuple::from_tts(id, slot.as_ref().unwrap());
+    let encoded = tuple.serialize();
+
+    let key = subspace::table((*rel).rd_id).pack(&id);
+    let txn = crate::transaction::get_transaction();
+    txn.set(&key, &encoded);
 }
 
 #[pg_guard]
@@ -311,7 +322,7 @@ unsafe extern "C" fn multi_insert(
 
 #[pg_guard]
 unsafe extern "C" fn tuple_delete(
-    _rel: Relation,
+    rel: Relation,
     tid: ItemPointer,
     _cid: CommandId,
     _snapshot: Snapshot,
@@ -320,13 +331,21 @@ unsafe extern "C" fn tuple_delete(
     _tmfd: *mut TM_FailureData,
     _changing_part: bool,
 ) -> TM_Result::Type {
+    let id = item_pointer_get_block_number_no_check(*tid);
+
     log!(
-        "TAM: Delete tuple with block id = {:?}, offset = {:?}",
-        (*tid).ip_blkid,
-        (*tid).ip_posid
+        "TAM: Delete tuple for relation = {:?} with id = {}",
+        (*rel).rd_id,
+        id,
     );
-    let _row_id = item_pointer_get_block_number(tid);
-    // database::delete_row_by_id(rel, row_id.try_into().unwrap());
+
+    let key = subspace::table((*rel).rd_id).pack(&id);
+
+    let txn = crate::transaction::get_transaction();
+    txn.clear(&key);
+
+    // For some reason this is not counting correctly how many tuples have been removed
+    // The response after running a delete is always "DELETE 0"
     return TM_Result::TM_Deleted;
 }
 
