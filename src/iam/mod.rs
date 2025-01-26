@@ -1,8 +1,10 @@
 use std::ptr::addr_of_mut;
 
-use pg_sys::{Datum, InvalidOid};
+use pg_sys::{
+    Datum, IndexAmRoutine, IndexBuildResult, IndexInfo, InvalidOid, Relation, 
+    RelationData, ScanKey, TableScanDesc
+};
 use pgrx::callconv::BoxRet;
-use pgrx::pg_sys::IndexAmRoutine;
 use pgrx::prelude::*;
 use pgrx_sql_entity_graph::metadata::{
     ArgumentError, Returns, ReturnsError, SqlMapping, SqlTranslatable,
@@ -44,27 +46,93 @@ unsafe impl SqlTranslatable for IndexAmHandler {
 }
 
 // https://www.postgresql.org/docs/current/index-api.html
+// Index build function - Called when CREATE INDEX is executed
+unsafe extern "C" fn ambuild(
+    _heap_relation: Relation,
+    _index_relation: Relation,
+    _index_info: *mut IndexInfo,
+) -> *mut IndexBuildResult {
+    // TODO: Actually build the index structure in FDB
+    // 1. Create a new subspace for the index
+    // 2. Scan the heap relation
+    // 3. Extract index keys from heap tuples
+    // 4. Insert index entries into FDB
+    std::ptr::null_mut()
+}
+
+// Insert an index tuple
+unsafe extern "C" fn aminsert(
+    _index_relation: Relation,
+    _values: *mut Datum,
+    _isnull: *mut bool,
+    _heap_tid: pg_sys::ItemPointerData,
+    _heap_relation: Relation,
+    _check_unique: bool,
+    _index_info: *mut IndexInfo,
+) -> bool {
+    // TODO: Insert a new index entry
+    // 1. Create key from values
+    // 2. Store in FDB with heap_tid as value
+    true
+}
+
+// Begin an index scan
+unsafe extern "C" fn ambeginscan(
+    _index_relation: Relation,
+    _nkeys: ::std::os::raw::c_int,
+    _norderbys: ::std::os::raw::c_int,
+) -> TableScanDesc {
+    // TODO: Initialize scan state
+    // 1. Create FDB range based on scan keys
+    // 2. Setup iterator
+    std::ptr::null_mut()
+}
+
+// Fetch next tuple from scan
+unsafe extern "C" fn amgettuple(
+    _scan: TableScanDesc,
+    _direction: ::std::os::raw::c_int,
+) -> bool {
+    // TODO: Get next matching tuple
+    // 1. Get next key-value from iterator
+    // 2. Return false if no more results
+    false
+}
+
+// Restart a scan with new scan keys
+unsafe extern "C" fn amrescan(
+    _scan: TableScanDesc,
+    _keys: ScanKey,
+    _nkeys: ::std::os::raw::c_int,
+    _orderbys: *mut ScanKey,
+    _norderbys: ::std::os::raw::c_int,
+) {
+    // TODO: Reset scan with new keys
+    // 1. Update range based on new keys
+    // 2. Reset iterator
+}
+
 static mut FDB_INDEX_AM_ROUTINE: IndexAmRoutine = IndexAmRoutine {
     type_: pgrx::pg_sys::NodeTag::T_IndexAmRoutine,
-    ambuild: todo!(),
-    ambuildempty: todo!(),
-    aminsert: todo!(),
-    aminsertcleanup: todo!(),
-    ambulkdelete: todo!(),
-    amvacuumcleanup: todo!(),
-    amcanreturn: todo!(),
-    amcostestimate: todo!(),
-    amoptions: todo!(),
-    amproperty: todo!(),
-    ambuildphasename: todo!(),
-    amvalidate: todo!(),
-    amadjustmembers: todo!(),
-    ambeginscan: todo!(),
-    amrescan: todo!(),
-    amgettuple: todo!(),
-    amendscan: todo!(),
-    ammarkpos: todo!(),
-    amrestrpos: todo!(),
+    ambuild: Some(ambuild),
+    ambuildempty: None, // Not needed
+    aminsert: Some(aminsert),
+    aminsertcleanup: None, // Not needed
+    ambulkdelete: None, // Optional - for bulk deletes
+    amvacuumcleanup: None, // Optional - for VACUUM
+    amcanreturn: None, // Optional - index-only scans
+    amcostestimate: None, // Optional - custom cost estimation
+    amoptions: None, // Optional - index-specific options
+    amproperty: None, // Optional - index properties
+    ambuildphasename: None, // Optional - progress reporting
+    amvalidate: None, // Optional - index validation
+    amadjustmembers: None, // Optional - parallel scan
+    ambeginscan: Some(ambeginscan),
+    amrescan: Some(amrescan),
+    amgettuple: Some(amgettuple),
+    amendscan: None, // Optional - cleanup at scan end
+    ammarkpos: None, // Optional - mark/restore position
+    amrestrpos: None, // Optional - mark/restore position
 
     // Bitmap scans not supported
     amgetbitmap: None,
