@@ -9,6 +9,7 @@ use pgrx::prelude::*;
 
 mod fdb;
 mod health;
+mod iam;
 mod subspace;
 mod tam;
 mod transaction;
@@ -69,7 +70,7 @@ mod tests {
     }
 
     #[pg_test]
-    fn index() {
+    fn heap_index() {
         // Create table with a primary key index (will be regular Postgres index)
         Spi::run("CREATE TABLE test (id INTEGER PRIMARY KEY) USING pgfdb").unwrap();
         Spi::run("INSERT INTO test (id) VALUES (1), (2), (3), (4)").unwrap();
@@ -81,6 +82,12 @@ mod tests {
             .unwrap()
             .unwrap();
         assert_eq!(2, count);
+    }
+
+    #[pg_test]
+    fn index() {
+        Spi::run("CREATE TABLE test (id INTEGER) USING pgfdb").unwrap();
+        Spi::run("CREATE INDEX id_idx ON test USING pgfdb_idx(id)").unwrap();
     }
 }
 
