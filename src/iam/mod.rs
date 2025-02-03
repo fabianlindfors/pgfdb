@@ -160,6 +160,14 @@ unsafe extern "C" fn amrescan(
     // 2. Reset iterator
 }
 
+// End an index scan
+unsafe extern "C" fn amendscan(_scan: IndexScanDesc) {
+    log!("IAM: End scan");
+    
+    // Free any allocated resources for this scan
+    // Currently no-op since we don't allocate anything in beginscan
+}
+
 unsafe extern "C" fn amoptions(_reloptions: Datum, _validate: bool) -> *mut bytea {
     // Null for default behaviour
     // We don't support any options on the index yet
@@ -193,7 +201,7 @@ unsafe impl BoxRet for IndexAmHandler {
         index_am_routine.ambeginscan = Some(ambeginscan);
         index_am_routine.amrescan = Some(amrescan);
         index_am_routine.amgettuple = Some(amgettuple);
-        index_am_routine.amendscan = None; // Optional - cleanup at scan end
+        index_am_routine.amendscan = Some(amendscan);
         index_am_routine.ammarkpos = None; // Optional - mark/restore position
         index_am_routine.amrestrpos = None; // Optional - mark/restore position
 
