@@ -1,7 +1,10 @@
 use std::task::{Context, Poll, Waker};
 
-use foundationdb::{future::FdbValue, FdbResult, RangeOption};
-use futures::{stream::BoxStream, FutureExt, StreamExt};
+use foundationdb::{
+    future::{FdbValue, FdbValues},
+    FdbResult, RangeOption,
+};
+use futures::{stream::BoxStream, FutureExt, StreamExt, TryStreamExt};
 use pgrx::{
     log,
     pg_sys::{
@@ -11,10 +14,14 @@ use pgrx::{
     PgBox,
 };
 
+use crate::tam::coding;
+
+use super::coding::Tuple;
+
 #[repr(C)]
 pub struct FdbScanDesc {
     base: TableScanDescData,
-    values: BoxStream<'static, FdbResult<FdbValue>>,
+    values: BoxStream<'static, FdbResult<Tuple>>,
 }
 
 impl FdbScanDesc {
@@ -45,7 +52,17 @@ impl FdbScanDesc {
         let txn = crate::transaction::get_transaction();
         let range_option = RangeOption::from(table_subspace.range());
 
-        let stream = txn.get_ranges_keyvalues(range_option, false).boxed();
+        let stream = txn
+            .get_ranges(range_option, false)
+            .map_ok(|values| {
+                futures::stream::iter(
+                    values
+                        .into_iter()
+                        .map(|keyvalue| Ok(coding::Tuple::deserialize(keyvalue.value()))),
+                )
+            })
+            .try_flatten()
+            .boxed();
 
         // We can't assign with `scan.values = ...` because `scan.values` is unitialized
         // Rust would attempt to drop the existing, nonsense value leading to UB and a crash.
@@ -58,7 +75,7 @@ impl FdbScanDesc {
         scan.into_pg() as *mut TableScanDescData
     }
 
-    pub fn next_value(self: &mut FdbScanDesc) -> Option<FdbValue> {
+    pub fn next_value(self: &mut FdbScanDesc) -> Option<Tuple> {
         let mut next_fut = self.values.next();
         let mut ctx = Context::from_waker(&Waker::noop());
         let next = loop {
@@ -70,11 +87,10 @@ impl FdbScanDesc {
             }
         };
 
-        // let next = self.values.next().block_on();
-        let Some(value) = next else {
+        let Some(tuple) = next else {
             return None;
         };
 
-        Some(value.unwrap())
+        Some(tuple.unwrap())
     }
 }
