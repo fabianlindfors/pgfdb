@@ -115,13 +115,13 @@ unsafe extern "C" fn aminsert(
     // Convert heap TID to storage - we only need the block number
     let block_num = unsafe { pgrx::itemptr::item_pointer_get_block_number_no_check(*heap_tid) };
     
-    // Store the block number directly as an i32
-    let block_num_bytes = (block_num as i32).to_le_bytes();
+    // Store the block number using FDB tuple encoding
+    let block_num_tuple = foundationdb::tuple::pack(&(block_num as i32));
 
     // Create the key using the subspace and key elements
     let key = index_subspace.pack(&key_elements);
 
-    txn.set(&key, &block_num_bytes);
+    txn.set(&key, &block_num_tuple);
 
     true
 }
@@ -259,16 +259,29 @@ unsafe extern "C" fn amgettuple(scan: IndexScanDesc, direction: ScanDirection::T
         return false;
     };
 
-    // Extract the block number from the value
-    // The value is just the block number as an i32 in little-endian bytes
-    if value.len() != 4 {
-        log!("IAM: Invalid block number format");
+    // Extract the block number from the value using FDB tuple unpacking
+    let tuple_elements = match foundationdb::tuple::unpack(&value) {
+        Ok(elements) => elements,
+        Err(_) => {
+            log!("IAM: Failed to unpack block number tuple");
+            return false;
+        }
+    };
+    
+    // Ensure we have exactly one element (the block number)
+    if tuple_elements.len() != 1 {
+        log!("IAM: Invalid block number tuple format");
         return false;
     }
     
-    let mut block_bytes = [0u8; 4];
-    block_bytes.copy_from_slice(&value[0..4]);
-    let block_num = i32::from_le_bytes(block_bytes) as u32;
+    // Extract the block number from the tuple
+    let block_num = match tuple_elements[0].as_i64() {
+        Some(num) => num as u32,
+        None => {
+            log!("IAM: Block number is not an integer");
+            return false;
+        }
+    };
     
     // Use a fixed offset of 1 (first item in the block)
     let offset_num = 1u16;
