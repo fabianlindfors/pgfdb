@@ -112,18 +112,16 @@ unsafe extern "C" fn aminsert(
         }
     }
 
-    // Convert heap TID to a tuple for storage
-    // Use the proper pgrx helper function to get the block number
+    // Convert heap TID to storage - we only need the block number
     let block_num = unsafe { pgrx::itemptr::item_pointer_get_block_number_no_check(*heap_tid) };
-    let offset_num = unsafe { (*heap_tid).ip_posid };
-
-    // Pack the TID as a tuple with block number and offset
-    let tid_tuple = foundationdb::tuple::pack(&(block_num, offset_num as u32));
+    
+    // Store the block number directly as an i32
+    let block_num_bytes = (block_num as i32).to_le_bytes();
 
     // Create the key using the subspace and key elements
     let key = index_subspace.pack(&key_elements);
 
-    txn.set(&key, &tid_tuple);
+    txn.set(&key, &block_num_bytes);
 
     true
 }
@@ -261,17 +259,19 @@ unsafe extern "C" fn amgettuple(scan: IndexScanDesc, direction: ScanDirection::T
         return false;
     };
 
-    // Extract the TID from the value
-    // The value is a tuple containing (block_num, offset_num)
-    let tid_tuple = foundationdb::tuple::unpack(&value).unwrap();
-    if tid_tuple.len() != 2 {
-        log!("IAM: Invalid TID tuple format");
+    // Extract the block number from the value
+    // The value is just the block number as an i32 in little-endian bytes
+    if value.len() != 4 {
+        log!("IAM: Invalid block number format");
         return false;
     }
-
-    // Get the block number and offset from the tuple
-    let block_num = tid_tuple[0].as_i64().unwrap() as u32;
-    let offset_num = tid_tuple[1].as_i64().unwrap() as u16;
+    
+    let mut block_bytes = [0u8; 4];
+    block_bytes.copy_from_slice(&value[0..4]);
+    let block_num = i32::from_le_bytes(block_bytes) as u32;
+    
+    // Use a fixed offset of 1 (first item in the block)
+    let offset_num = 1u16;
 
     // Set the ItemPointer in the scan
     unsafe {
