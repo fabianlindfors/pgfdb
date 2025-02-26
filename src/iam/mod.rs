@@ -119,17 +119,9 @@ unsafe extern "C" fn aminsert(
     // Create the key using the subspace and key elements
     let key = index_subspace.pack(&key_elements);
 
-    // Store in FDB: key -> tid_tuple
-    match pollster::block_on(txn.set(key, &tid_tuple)) {
-        Ok(_) => {
-            log!("IAM: Successfully inserted index entry");
-            true
-        }
-        Err(e) => {
-            log!("IAM: Failed to insert index entry: {:?}", e);
-            false
-        }
-    }
+    txn.set(&key, &tid_tuple);
+
+    true
 }
 
 // Helper function to encode a Postgres datum into an FDB tuple element
