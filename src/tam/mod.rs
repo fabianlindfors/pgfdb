@@ -173,13 +173,10 @@ unsafe extern "C" fn scan_get_next_slot(
     let scan = (raw_scan as *mut scan::FdbScanDesc).as_mut().unwrap();
 
     // Load next value from the ongoing scan
-    let Some(value) = scan.next_value() else {
+    let Some(tuple) = scan.next_value() else {
         // No value means there are no more tuples in the scan
         return false;
     };
-
-    // Decode the value into our intermediate data structure
-    let tuple = coding::Tuple::deserialize(value.value());
 
     // Store the decoded values on the TTS
     tuple.load_into_tts(slot.as_mut().unwrap());
@@ -267,7 +264,7 @@ unsafe extern "C" fn tuple_insert(
 
     // Generate random ID which we will use as a Postgres item pointer
     // An item pointers stores an unsigned 48 integer (32-bit block number and 16-bit offset)
-    // We randomly generate both of these and then combine them to a random item pointer ID
+    // We randomly generate a block number and always set the offset to 1
     let mut rng = rand::thread_rng();
     let id = rng.gen_range(0..=u32::MAX);
 
