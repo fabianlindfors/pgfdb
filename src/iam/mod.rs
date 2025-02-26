@@ -134,10 +134,10 @@ unsafe extern "C" fn aminsert(
 
 // Helper function to encode a Postgres datum into an FDB tuple element
 // This function will need to be implemented to handle different Postgres types
-fn encode_datum_for_index(
+fn encode_datum_for_index<'a>(
     datum: Datum,
     type_oid: pg_sys::Oid,
-) -> Option<foundationdb::tuple::Element> {
+) -> Option<foundationdb::tuple::Element<'a>> {
     // TODO: Implement proper encoding for different Postgres types
     // This is a placeholder that will need to be implemented
 
