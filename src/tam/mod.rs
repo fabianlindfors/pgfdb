@@ -62,8 +62,10 @@ unsafe impl SqlTranslatable for TableAmHandler {
 }
 
 #[repr(C)]
-pub struct IndexScan {
+pub struct FdbIndexFetchTableData {
     pub base: IndexFetchTableData,
+    // Add any custom fields we need for index operations
+    pub current_id: u32,
 }
 
 static mut FDB_TABLE_AM_ROUTINE: TableAmRoutine = TableAmRoutine {
@@ -206,9 +208,10 @@ unsafe extern "C" fn scan_get_next_slot_tidrange(
 #[pg_guard]
 unsafe extern "C" fn index_fetch_begin(rel: Relation) -> *mut IndexFetchTableData {
     log!("TAM: Index fetch begin");
-    let mut index_scan = unsafe { PgBox::<IndexScan>::alloc() };
+    let mut index_scan = unsafe { PgBox::<FdbIndexFetchTableData>::alloc() };
 
     index_scan.base.rel = rel;
+    index_scan.current_id = 0; // Initialize our custom field
 
     index_scan.into_pg() as *mut IndexFetchTableData
 }
@@ -221,7 +224,7 @@ unsafe extern "C" fn index_fetch_reset(_data: *mut IndexFetchTableData) {
 #[pg_guard]
 unsafe extern "C" fn index_fetch_end(data: *mut IndexFetchTableData) {
     log!("TAM: Index fetch end");
-    let _index_scan = data as *mut IndexScan;
+    let _index_scan = data as *mut FdbIndexFetchTableData;
 }
 
 #[pg_guard]
@@ -233,9 +236,13 @@ unsafe extern "C" fn index_fetch_tuple(
     _call_again: *mut bool,
     _all_dead: *mut bool,
 ) -> bool {
+    let fdb_scan = scan as *mut FdbIndexFetchTableData;
     log!("TAM: Fetch tuple, id = {:?}", (*tid).ip_blkid);
 
     let id = item_pointer_get_block_number_no_check(*tid);
+    // Store the current ID in our custom field for potential future use
+    (*fdb_scan).current_id = id;
+    
     let key = subspace::table((*(*scan).rel).rd_id).pack(&id);
 
     let txn = crate::transaction::get_transaction();
