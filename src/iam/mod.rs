@@ -87,11 +87,11 @@ unsafe extern "C" fn aminsert(
     for i in 0..natts {
         if unsafe { *isnull.add(i) } {
             // For NULL values, we'll use a special marker in the tuple
-            key_elements.push(foundationdb::tuple::Element::Null);
+            key_elements.push(foundationdb::tuple::Element::Nil);
         } else {
             // Get the attribute type OID
             let attr = unsafe { (*index_tuple_desc).attrs.as_slice(natts)[i] };
-            let type_oid = unsafe { (*attr).atttypid };
+            let type_oid = attr.atttypid;
 
             // Get the datum
             let datum = unsafe { *values.add(i) };
@@ -144,7 +144,7 @@ fn encode_datum_for_index(
     // For now, we'll just return a placeholder to show the structure
     log!(
         "IAM: encode_datum_for_index not yet implemented for type OID: {}",
-        type_oid
+        type_oid.as_u32()
     );
     None
 }
