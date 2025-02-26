@@ -8,14 +8,14 @@ use pg_sys::{
     InvalidOid, ItemPointer, JoinType::JOIN_INNER, PlannerInfo, Relation, ScanDirection, ScanKey,
     Selectivity,
 };
-use std::task::{Context, Poll, Waker};
-use pgrx::itemptr::item_pointer_set_all;
 use pgrx::callconv::BoxRet;
+use pgrx::itemptr::item_pointer_set_all;
 use pgrx::prelude::*;
 use pgrx_sql_entity_graph::metadata::{
     ArgumentError, Returns, ReturnsError, SqlMapping, SqlTranslatable,
 };
 use pollster;
+use std::task::{Context, Poll, Waker};
 
 #[pg_extern(sql = "
     -- We need to use custom SQL to define our IAM handler function as Postgres requires the function signature
@@ -214,7 +214,7 @@ unsafe extern "C" fn ambeginscan(
 
     // Create an empty stream initially - will be populated in rescan
     let empty_stream = futures::stream::empty().boxed();
-    
+
     // We must use ptr::write to avoid dropping uninitialized memory
     unsafe {
         let scan_pointer = scan.as_ptr();
@@ -227,19 +227,19 @@ unsafe extern "C" fn ambeginscan(
 // Fetch next tuple from scan
 unsafe extern "C" fn amgettuple(scan: IndexScanDesc, direction: ScanDirection::Type) -> bool {
     log!("IAM: Get tuple, direction={}", direction);
-    
+
     // Only support forward scans for now
     if direction != ScanDirection::ForwardScanDirection {
         log!("IAM: Only forward scans are supported");
         return false;
     }
-    
+
     let fdb_scan = scan as *mut FdbIndexScan;
-    
+
     // Get the next key-value pair from the stream
     let mut next_fut = unsafe { (*fdb_scan).values.next() };
     let mut ctx = Context::from_waker(&Waker::noop());
-    
+
     // Poll the future until it's ready
     let next = loop {
         match next_fut.poll_unpin(&mut ctx) {
@@ -249,18 +249,18 @@ unsafe extern "C" fn amgettuple(scan: IndexScanDesc, direction: ScanDirection::T
             Poll::Pending => std::thread::sleep(std::time::Duration::from_millis(1)),
         }
     };
-    
+
     // If there's no more data, return false
     let Some(result) = next else {
         return false;
     };
-    
+
     // Handle any errors
     let Ok((_key, value)) = result else {
         log!("IAM: Error fetching next index entry");
         return false;
     };
-    
+
     // Extract the TID from the value
     // The value is a tuple containing (block_num, offset_num)
     let tid_tuple = foundationdb::tuple::unpack(&value).unwrap();
@@ -268,16 +268,16 @@ unsafe extern "C" fn amgettuple(scan: IndexScanDesc, direction: ScanDirection::T
         log!("IAM: Invalid TID tuple format");
         return false;
     }
-    
+
     // Get the block number and offset from the tuple
     let block_num = tid_tuple[0].as_i64().unwrap() as u32;
     let offset_num = tid_tuple[1].as_i64().unwrap() as u16;
-    
+
     // Set the ItemPointer in the scan
     unsafe {
         item_pointer_set_all(&mut (*scan).xs_heaptid, block_num, offset_num);
     }
-    
+
     true
 }
 
@@ -289,16 +289,20 @@ unsafe extern "C" fn amrescan(
     orderbys: ScanKey,
     norderbys: ::std::os::raw::c_int,
 ) {
-    log!("IAM: Re-scan with {} keys and {} orderbys", nkeys, norderbys);
+    log!(
+        "IAM: Re-scan with {} keys and {} orderbys",
+        nkeys,
+        norderbys
+    );
 
     let fdb_scan = scan as *mut FdbIndexScan;
     let index_relation = (*scan).indexRelation;
     let index_oid = (*index_relation).rd_id;
     let index_subspace = crate::subspace::index(index_oid);
-    
+
     // Get the transaction
     let txn = crate::transaction::get_transaction();
-    
+
     // Create a range based on the scan keys
     let range_option = if nkeys > 0 {
         // TODO: Implement proper key range construction based on scan keys
@@ -308,14 +312,19 @@ unsafe extern "C" fn amrescan(
         // If no keys, scan the entire index
         RangeOption::from(index_subspace.range())
     };
-    
+
     // Create a stream of key-value pairs from FDB
     let stream = txn
         .get_ranges(range_option, false)
-        .map_ok(|kvs| futures::stream::iter(kvs.into_iter().map(|kv| Ok((kv.key().to_vec(), kv.value().to_vec())))))
+        .map_ok(|kvs| {
+            futures::stream::iter(
+                kvs.into_iter()
+                    .map(|kv| Ok((kv.key().to_vec(), kv.value().to_vec()))),
+            )
+        })
         .try_flatten()
         .boxed();
-    
+
     // Replace the existing stream
     // First, drop the old stream to avoid leaking resources
     let old_stream = unsafe { std::ptr::replace(&mut (*fdb_scan).values, stream) };
@@ -325,9 +334,9 @@ unsafe extern "C" fn amrescan(
 // End an index scan
 unsafe extern "C" fn amendscan(scan: IndexScanDesc) {
     log!("IAM: End scan");
-    
+
     let fdb_scan = scan as *mut FdbIndexScan;
-    
+
     // Take ownership of the stream to drop it
     let stream = unsafe { std::ptr::read(&(*fdb_scan).values) };
     drop(stream);
