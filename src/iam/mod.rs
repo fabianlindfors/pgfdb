@@ -130,15 +130,23 @@ fn encode_datum_for_index<'a>(
     datum: Datum,
     type_oid: pg_sys::Oid,
 ) -> Option<foundationdb::tuple::Element<'a>> {
-    // TODO: Implement proper encoding for different Postgres types
-    // This is a placeholder that will need to be implemented
-
-    // For now, we'll just return a placeholder to show the structure
-    log!(
-        "IAM: encode_datum_for_index not yet implemented for type OID: {}",
-        type_oid.as_u32()
-    );
-    None
+    match type_oid {
+        // INT4/INTEGER (OID 23)
+        pg_sys::INT4OID => {
+            // Convert the datum to a Rust i32
+            let value = unsafe { pg_sys::DatumGetInt32(datum) };
+            Some(foundationdb::tuple::Element::I32(value))
+        },
+        // Add more types as needed
+        _ => {
+            // Log unsupported types
+            log!(
+                "IAM: encode_datum_for_index not yet implemented for type OID: {}",
+                type_oid.as_u32()
+            );
+            None
+        }
+    }
 }
 
 // https://www.postgresql.org/docs/current/index-cost-estimation.html
