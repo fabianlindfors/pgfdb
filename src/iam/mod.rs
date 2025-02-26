@@ -134,9 +134,9 @@ fn encode_datum_for_index<'a>(
         // INT4/INTEGER (OID 23)
         pg_sys::INT4OID => {
             // Convert the datum to a Rust i32
-            let value = unsafe { pg_sys::DatumGetInt32(datum) };
-            Some(foundationdb::tuple::Element::I32(value))
-        },
+            let value = unsafe { pg_sys::DatumGetInt64(datum) };
+            Some(foundationdb::tuple::Element::Int(value))
+        }
         // Add more types as needed
         _ => {
             // Log unsupported types
