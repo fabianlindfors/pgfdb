@@ -109,7 +109,8 @@ unsafe extern "C" fn aminsert(
     }
 
     // Convert heap TID to a tuple for storage
-    let block_num = unsafe { (*heap_tid).ip_blkid.bi_hi << 16 | (*heap_tid).ip_blkid.bi_lo as u32 };
+    // Use the proper pgrx helper function to get the block number
+    let block_num = unsafe { pgrx::itemptr::item_pointer_get_block_number_no_check(*heap_tid) };
     let offset_num = unsafe { (*heap_tid).ip_posid };
 
     // Pack the TID as a tuple with block number and offset
