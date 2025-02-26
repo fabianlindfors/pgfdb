@@ -1,6 +1,6 @@
 use std::ptr;
 
-use foundationdb::{future::FdbResult, RangeOption};
+use foundationdb::{future::FdbValue, tuple::unpack, FdbResult, RangeOption};
 use futures::{stream::BoxStream, FutureExt, StreamExt, TryStreamExt};
 use pg_sys::{
     bytea, clauselist_selectivity, get_quals_from_indexclauses, Cost, Datum, IndexAmRoutine,
@@ -8,9 +8,9 @@ use pg_sys::{
     InvalidOid, ItemPointer, JoinType::JOIN_INNER, PlannerInfo, Relation, ScanDirection, ScanKey,
     Selectivity,
 };
-use pgrx::callconv::BoxRet;
 use pgrx::itemptr::item_pointer_set_all;
 use pgrx::prelude::*;
+use pgrx::{callconv::BoxRet, pg_sys::panic::ErrorReportable};
 use pgrx_sql_entity_graph::metadata::{
     ArgumentError, Returns, ReturnsError, SqlMapping, SqlTranslatable,
 };
@@ -66,7 +66,7 @@ unsafe extern "C" fn aminsert(
     index_relation: Relation,
     values: *mut Datum,
     isnull: *mut bool,
-    heap_tid: ItemPointer,
+    tid: ItemPointer,
     _heap_relation: Relation,
     _check_unique: IndexUniqueCheck::Type,
     _index_unchanged: bool,
@@ -112,16 +112,14 @@ unsafe extern "C" fn aminsert(
         }
     }
 
-    // Convert heap TID to storage - we only need the block number
-    let block_num = unsafe { pgrx::itemptr::item_pointer_get_block_number_no_check(*heap_tid) };
-    
-    // Store the block number using FDB tuple encoding
-    let block_num_tuple = foundationdb::tuple::pack(&(block_num as i32));
+    // Get ID from TID and encode using tuple encoding
+    let id = unsafe { pgrx::itemptr::item_pointer_get_block_number_no_check(*tid) };
+    let id_encoded = foundationdb::tuple::pack(&id);
 
     // Create the key using the subspace and key elements
     let key = index_subspace.pack(&key_elements);
 
-    txn.set(&key, &block_num_tuple);
+    txn.set(&key, &id_encoded);
 
     true
 }
@@ -187,7 +185,7 @@ struct FdbIndexScan {
     // Must be first field to ensure proper casting
     base: IndexScanDescData,
     // Stream of values from FDB
-    values: BoxStream<'static, FdbResult<(Vec<u8>, Vec<u8>)>>,
+    values: BoxStream<'static, FdbResult<FdbValue>>,
 }
 
 // Begin an index scan
@@ -253,42 +251,18 @@ unsafe extern "C" fn amgettuple(scan: IndexScanDesc, direction: ScanDirection::T
         return false;
     };
 
-    // Handle any errors
-    let Ok((_key, value)) = result else {
-        log!("IAM: Error fetching next index entry");
+    let Ok(encoded_id) = result else {
         return false;
     };
 
-    // Extract the block number from the value using FDB tuple unpacking
-    let tuple_elements = match foundationdb::tuple::unpack(&value) {
-        Ok(elements) => elements,
-        Err(_) => {
-            log!("IAM: Failed to unpack block number tuple");
-            return false;
-        }
-    };
-    
-    // Ensure we have exactly one element (the block number)
-    if tuple_elements.len() != 1 {
-        log!("IAM: Invalid block number tuple format");
-        return false;
-    }
-    
-    // Extract the block number from the tuple
-    let block_num = match tuple_elements[0].as_i64() {
-        Some(num) => num as u32,
-        None => {
-            log!("IAM: Block number is not an integer");
-            return false;
-        }
-    };
-    
+    let id: u32 = unpack(encoded_id.value()).unwrap_or_report();
+
     // Use a fixed offset of 1 (first item in the block)
     let offset_num = 1u16;
 
     // Set the ItemPointer in the scan
     unsafe {
-        item_pointer_set_all(&mut (*scan).xs_heaptid, block_num, offset_num);
+        item_pointer_set_all(&mut (*scan).xs_heaptid, id, offset_num);
     }
 
     true
@@ -317,26 +291,10 @@ unsafe extern "C" fn amrescan(
     let txn = crate::transaction::get_transaction();
 
     // Create a range based on the scan keys
-    let range_option = if nkeys > 0 {
-        // TODO: Implement proper key range construction based on scan keys
-        // For now, just scan the entire index
-        RangeOption::from(index_subspace.range())
-    } else {
-        // If no keys, scan the entire index
-        RangeOption::from(index_subspace.range())
-    };
+    let range_option = RangeOption::from(index_subspace.range());
 
     // Create a stream of key-value pairs from FDB
-    let stream = txn
-        .get_ranges(range_option, false)
-        .map_ok(|kvs| {
-            futures::stream::iter(
-                kvs.into_iter()
-                    .map(|kv| Ok((kv.key().to_vec(), kv.value().to_vec()))),
-            )
-        })
-        .try_flatten()
-        .boxed();
+    let stream = txn.get_ranges_keyvalues(range_option, false).boxed();
 
     // Replace the existing stream
     // First, drop the old stream to avoid leaking resources
