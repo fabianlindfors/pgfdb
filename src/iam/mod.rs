@@ -6,12 +6,12 @@ use pg_sys::{
     InvalidOid, ItemPointer, JoinType::JOIN_INNER, PlannerInfo, Relation, ScanDirection, ScanKey,
     Selectivity,
 };
-use pollster;
 use pgrx::callconv::BoxRet;
 use pgrx::prelude::*;
 use pgrx_sql_entity_graph::metadata::{
     ArgumentError, Returns, ReturnsError, SqlMapping, SqlTranslatable,
 };
+use pollster;
 
 #[pg_extern(sql = "
     -- We need to use custom SQL to define our IAM handler function as Postgres requires the function signature
@@ -77,13 +77,13 @@ unsafe extern "C" fn aminsert(
     // Create a subspace for this index using the index relation OID
     let index_oid = unsafe { (*index_relation).rd_id };
     let index_subspace = crate::subspace::index(index_oid);
-    
+
     // Get the current transaction
     let txn = crate::transaction::get_transaction();
 
     // Prepare tuple elements for the index key
     let mut key_elements = Vec::with_capacity(natts);
-    
+
     for i in 0..natts {
         if unsafe { *isnull.add(i) } {
             // For NULL values, we'll use a special marker in the tuple
@@ -92,10 +92,10 @@ unsafe extern "C" fn aminsert(
             // Get the attribute type OID
             let attr = unsafe { (*index_tuple_desc).attrs.as_slice(natts)[i] };
             let type_oid = unsafe { (*attr).atttypid };
-            
+
             // Get the datum
             let datum = unsafe { *values.add(i) };
-            
+
             // Encode the datum using our helper function
             // This will convert the Postgres datum to an FDB tuple element
             match encode_datum_for_index(datum, type_oid) {
@@ -111,15 +111,15 @@ unsafe extern "C" fn aminsert(
     // Convert heap TID to a tuple for storage
     let block_num = unsafe { (*heap_tid).ip_blkid.bi_hi << 16 | (*heap_tid).ip_blkid.bi_lo as u32 };
     let offset_num = unsafe { (*heap_tid).ip_posid };
-    
+
     // Pack the TID as a tuple with block number and offset
     let tid_tuple = foundationdb::tuple::pack(&(block_num, offset_num as u32));
 
     // Create the key using the subspace and key elements
     let key = index_subspace.pack(&key_elements);
-    
+
     // Store in FDB: key -> tid_tuple
-    match pollster::block_on(txn.set(key, tid_tuple)) {
+    match pollster::block_on(txn.set(key, &tid_tuple)) {
         Ok(_) => {
             log!("IAM: Successfully inserted index entry");
             true
@@ -133,12 +133,18 @@ unsafe extern "C" fn aminsert(
 
 // Helper function to encode a Postgres datum into an FDB tuple element
 // This function will need to be implemented to handle different Postgres types
-fn encode_datum_for_index(datum: Datum, type_oid: pg_sys::Oid) -> Option<foundationdb::tuple::Element> {
+fn encode_datum_for_index(
+    datum: Datum,
+    type_oid: pg_sys::Oid,
+) -> Option<foundationdb::tuple::Element> {
     // TODO: Implement proper encoding for different Postgres types
     // This is a placeholder that will need to be implemented
-    
+
     // For now, we'll just return a placeholder to show the structure
-    log!("IAM: encode_datum_for_index not yet implemented for type OID: {}", type_oid);
+    log!(
+        "IAM: encode_datum_for_index not yet implemented for type OID: {}",
+        type_oid
+    );
     None
 }
 
@@ -230,7 +236,7 @@ unsafe extern "C" fn amrescan(
 // End an index scan
 unsafe extern "C" fn amendscan(_scan: IndexScanDesc) {
     log!("IAM: End scan");
-    
+
     // Free any allocated resources for this scan
     // Currently no-op since we don't allocate anything in beginscan
 }
