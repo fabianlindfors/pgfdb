@@ -1,11 +1,15 @@
 use std::ptr;
 
+use foundationdb::{future::FdbResult, RangeOption};
+use futures::{stream::BoxStream, FutureExt, StreamExt, TryStreamExt};
 use pg_sys::{
     bytea, clauselist_selectivity, get_quals_from_indexclauses, Cost, Datum, IndexAmRoutine,
     IndexBuildResult, IndexInfo, IndexPath, IndexScanDesc, IndexScanDescData, IndexUniqueCheck,
     InvalidOid, ItemPointer, JoinType::JOIN_INNER, PlannerInfo, Relation, ScanDirection, ScanKey,
     Selectivity,
 };
+use std::task::{Context, Poll, Waker};
+use pgrx::itemptr::item_pointer_set_all;
 use pgrx::callconv::BoxRet;
 use pgrx::prelude::*;
 use pgrx_sql_entity_graph::metadata::{
@@ -181,9 +185,11 @@ unsafe extern "C" fn amcostestimate(
 }
 
 #[repr(C)]
-struct FdbIndexScanDesc {
+struct FdbIndexScan {
     // Must be first field to ensure proper casting
     base: IndexScanDescData,
+    // Stream of values from FDB
+    values: BoxStream<'static, FdbResult<(Vec<u8>, Vec<u8>)>>,
 }
 
 // Begin an index scan
@@ -194,7 +200,7 @@ unsafe extern "C" fn ambeginscan(
 ) -> IndexScanDesc {
     log!("IAM: Begin scan");
 
-    let mut scan = PgBox::<FdbIndexScanDesc>::alloc();
+    let mut scan = PgBox::<FdbIndexScan>::alloc();
 
     // Initialize the base IndexScanDescData
     scan.base.indexRelation = index_relation;
@@ -206,40 +212,125 @@ unsafe extern "C" fn ambeginscan(
     scan.base.xs_want_itup = false;
     scan.base.xs_temp_snap = false;
 
+    // Create an empty stream initially - will be populated in rescan
+    let empty_stream = futures::stream::empty().boxed();
+    
+    // We must use ptr::write to avoid dropping uninitialized memory
+    unsafe {
+        let scan_pointer = scan.as_ptr();
+        std::ptr::write(&mut (*scan_pointer).values, empty_stream);
+    }
+
     scan.into_pg() as IndexScanDesc
 }
 
 // Fetch next tuple from scan
-unsafe extern "C" fn amgettuple(_scan: IndexScanDesc, _direction: ScanDirection::Type) -> bool {
-    log!("IAM: Get tuple");
-
-    // TODO: Get next matching tuple
-    // 1. Get next key-value from iterator
-    // 2. Return false if no more results
-    false
+unsafe extern "C" fn amgettuple(scan: IndexScanDesc, direction: ScanDirection::Type) -> bool {
+    log!("IAM: Get tuple, direction={}", direction);
+    
+    // Only support forward scans for now
+    if direction != ScanDirection::ForwardScanDirection {
+        log!("IAM: Only forward scans are supported");
+        return false;
+    }
+    
+    let fdb_scan = scan as *mut FdbIndexScan;
+    
+    // Get the next key-value pair from the stream
+    let mut next_fut = unsafe { (*fdb_scan).values.next() };
+    let mut ctx = Context::from_waker(&Waker::noop());
+    
+    // Poll the future until it's ready
+    let next = loop {
+        match next_fut.poll_unpin(&mut ctx) {
+            Poll::Ready(result) => {
+                break result;
+            }
+            Poll::Pending => std::thread::sleep(std::time::Duration::from_millis(1)),
+        }
+    };
+    
+    // If there's no more data, return false
+    let Some(result) = next else {
+        return false;
+    };
+    
+    // Handle any errors
+    let Ok((_key, value)) = result else {
+        log!("IAM: Error fetching next index entry");
+        return false;
+    };
+    
+    // Extract the TID from the value
+    // The value is a tuple containing (block_num, offset_num)
+    let tid_tuple = foundationdb::tuple::unpack(&value).unwrap();
+    if tid_tuple.len() != 2 {
+        log!("IAM: Invalid TID tuple format");
+        return false;
+    }
+    
+    // Get the block number and offset from the tuple
+    let block_num = tid_tuple[0].as_i64().unwrap() as u32;
+    let offset_num = tid_tuple[1].as_i64().unwrap() as u16;
+    
+    // Set the ItemPointer in the scan
+    unsafe {
+        item_pointer_set_all(&mut (*scan).xs_heaptid, block_num, offset_num);
+    }
+    
+    true
 }
 
 // Restart a scan with new scan keys
 unsafe extern "C" fn amrescan(
-    _scan: IndexScanDesc,
-    _keys: ScanKey,
-    _nkeys: ::std::os::raw::c_int,
-    _orderbys: ScanKey,
-    _norderbys: ::std::os::raw::c_int,
+    scan: IndexScanDesc,
+    keys: ScanKey,
+    nkeys: ::std::os::raw::c_int,
+    orderbys: ScanKey,
+    norderbys: ::std::os::raw::c_int,
 ) {
-    log!("IAM: Re-scan");
+    log!("IAM: Re-scan with {} keys and {} orderbys", nkeys, norderbys);
 
-    // TODO: Reset scan with new keys
-    // 1. Update range based on new keys
-    // 2. Reset iterator
+    let fdb_scan = scan as *mut FdbIndexScan;
+    let index_relation = (*scan).indexRelation;
+    let index_oid = (*index_relation).rd_id;
+    let index_subspace = crate::subspace::index(index_oid);
+    
+    // Get the transaction
+    let txn = crate::transaction::get_transaction();
+    
+    // Create a range based on the scan keys
+    let range_option = if nkeys > 0 {
+        // TODO: Implement proper key range construction based on scan keys
+        // For now, just scan the entire index
+        RangeOption::from(index_subspace.range())
+    } else {
+        // If no keys, scan the entire index
+        RangeOption::from(index_subspace.range())
+    };
+    
+    // Create a stream of key-value pairs from FDB
+    let stream = txn
+        .get_ranges(range_option, false)
+        .map_ok(|kvs| futures::stream::iter(kvs.into_iter().map(|kv| Ok((kv.key().to_vec(), kv.value().to_vec())))))
+        .try_flatten()
+        .boxed();
+    
+    // Replace the existing stream
+    // First, drop the old stream to avoid leaking resources
+    let old_stream = unsafe { std::ptr::replace(&mut (*fdb_scan).values, stream) };
+    drop(old_stream);
 }
 
 // End an index scan
-unsafe extern "C" fn amendscan(_scan: IndexScanDesc) {
+unsafe extern "C" fn amendscan(scan: IndexScanDesc) {
     log!("IAM: End scan");
-
-    // Free any allocated resources for this scan
-    // Currently no-op since we don't allocate anything in beginscan
+    
+    let fdb_scan = scan as *mut FdbIndexScan;
+    
+    // Take ownership of the stream to drop it
+    let stream = unsafe { std::ptr::read(&(*fdb_scan).values) };
+    drop(stream);
 }
 
 unsafe extern "C" fn amoptions(_reloptions: Datum, _validate: bool) -> *mut bytea {
