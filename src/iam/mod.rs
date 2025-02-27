@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::ptr;
 
 use foundationdb::{future::FdbValue, tuple::unpack, FdbResult, RangeOption};
@@ -35,10 +36,6 @@ use std::task::{Context, Poll, Waker};
     CREATE OPERATOR CLASS pgfdb_idx_text
     DEFAULT FOR TYPE TEXT USING pgfdb_idx AS
     OPERATOR 1 = (TEXT, TEXT);
-    
-    CREATE OPERATOR CLASS pgfdb_idx_varchar
-    DEFAULT FOR TYPE VARCHAR USING pgfdb_idx AS
-    OPERATOR 1 = (VARCHAR, VARCHAR);
     ")]
 pub fn pgfdb_iam_handler() -> IndexAmHandler {
     IndexAmHandler
@@ -144,19 +141,14 @@ fn encode_datum_for_index<'a>(
             // Convert the datum to a Rust i32
             let value = unsafe { pg_sys::DatumGetInt64(datum) };
             Some(foundationdb::tuple::Element::Int(value))
-        },
-        // TEXT (OID 25)
-        pg_sys::TEXTOID => {
+        }
+        // TEXT (OID 25) or VARCHAR (OID 1043)
+        pg_sys::VARCHAROID | pg_sys::TEXTOID => {
             // Use pgrx's text_to_rust_str_unchecked to convert to a Rust string
-            let text = unsafe { pgrx::text_to_rust_str_unchecked(datum as *const pg_sys::text).to_string() };
-            Some(foundationdb::tuple::Element::String(text))
-        },
-        // VARCHAR (OID 1043)
-        pg_sys::VARCHAROID => {
-            // Use pgrx's text_to_rust_str_unchecked to convert to a Rust string
-            let text = unsafe { pgrx::text_to_rust_str_unchecked(datum as *const pg_sys::text).to_string() };
-            Some(foundationdb::tuple::Element::String(text))
-        },
+            let varlena: PgVarlena<()> = unsafe { PgVarlena::from_datum(datum) };
+            let text = unsafe { pgrx::text_to_rust_str_unchecked(varlena.into_pg()).to_string() };
+            Some(foundationdb::tuple::Element::String(Cow::Owned(text)))
+        }
         // Add more types as needed
         _ => {
             // Log unsupported types
