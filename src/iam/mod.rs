@@ -117,14 +117,17 @@ unsafe extern "C" fn aminsert(
         }
     }
 
-    // Get ID from TID and encode using tuple encoding
+    // Get ID from TID
     let id = unsafe { pgrx::itemptr::item_pointer_get_block_number_no_check(*tid) };
-    let id_encoded = foundationdb::tuple::pack(&id);
+    
+    // Add the ID to the key elements as the last element
+    key_elements.push(foundationdb::tuple::Element::Int(id as i64));
 
-    // Create the key using the subspace and key elements
+    // Create the key using the subspace and key elements (which now includes the ID)
     let key = index_subspace.pack(&key_elements);
 
-    txn.set(&key, &id_encoded);
+    // Set an empty value since the ID is now part of the key
+    txn.set(&key, &[]);
 
     true
 }
@@ -263,11 +266,24 @@ unsafe extern "C" fn amgettuple(scan: IndexScanDesc, direction: ScanDirection::T
         return false;
     };
 
-    let Ok(encoded_id) = result else {
+    let Ok(key_value) = result else {
         return false;
     };
-
-    let id: u32 = unpack(encoded_id.value()).unwrap_or_report();
+    
+    // Unpack the key to get the tuple elements
+    let key_tuple = index_subspace.unpack(key_value.key()).unwrap_or_report();
+    
+    // The ID is the last element in the key tuple
+    let id_element = key_tuple.last().unwrap_or_report();
+    
+    // Extract the ID from the tuple element
+    let id: u32 = match id_element {
+        foundationdb::tuple::Element::Int(i) => (*i as u32),
+        _ => {
+            log!("IAM: Invalid ID format in index");
+            return false;
+        }
+    };
 
     // Use a fixed offset of 1 (first item in the block)
     let offset_num = 1u16;
