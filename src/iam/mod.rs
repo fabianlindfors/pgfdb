@@ -311,14 +311,54 @@ unsafe extern "C" fn amrescan(
     let txn = crate::transaction::get_transaction();
 
     // Create a range based on the scan keys
-    let range_option = RangeOption::from(index_subspace.range());
+    let range_option = if nkeys > 0 {
+        // We have scan keys, so create a prefix-based range
+        let index_tuple_desc = (*index_relation).rd_att;
+        let mut prefix_elements = Vec::with_capacity(nkeys as usize);
+
+        // Process each scan key to build our prefix
+        for i in 0..nkeys {
+            let scan_key = &*keys.add(i as usize);
+            
+            // Only handle equality operators (strategy number 1) for now
+            if scan_key.sk_strategy != 1 {
+                log!("IAM: Only equality operators are supported for index scans");
+                continue;
+            }
+
+            // Get the attribute type OID
+            let attr_num = scan_key.sk_attno as usize - 1; // Convert to 0-based index
+            let attr = (*index_tuple_desc).attrs.as_slice((*index_tuple_desc).natts as usize)[attr_num];
+            let type_oid = attr.atttypid;
+
+            // Encode the datum using our helper function
+            if let Some(element) = encode_datum_for_index(scan_key.sk_argument, type_oid) {
+                prefix_elements.push(element);
+            } else {
+                log!("IAM: Failed to encode scan key datum for index");
+            }
+        }
+
+        // Create a prefix-based range
+        if !prefix_elements.is_empty() {
+            log!("IAM: Using prefix-based range scan with {} elements", prefix_elements.len());
+            // Create a range that starts with our prefix and ends just before the next possible prefix
+            RangeOption::from(index_subspace.subspace(&prefix_elements).range())
+        } else {
+            // Fall back to full range if we couldn't create a prefix
+            RangeOption::from(index_subspace.range())
+        }
+    } else {
+        // No scan keys, so scan the entire index
+        RangeOption::from(index_subspace.range())
+    };
 
     // Create a stream of key-value pairs from FDB
     let stream = txn.get_ranges_keyvalues(range_option, false).boxed();
 
     // Replace the existing stream
     // First, drop the old stream to avoid leaking resources
-    let old_stream = unsafe { std::ptr::replace(&mut (*fdb_scan).values, stream) };
+    let old_stream = std::ptr::replace(&mut (*fdb_scan).values, stream);
     drop(old_stream);
 }
 
