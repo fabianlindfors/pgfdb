@@ -21,8 +21,8 @@ pg17 = ["pgrx/pg17", "pgrx-tests/pg17"]
 pg_test = ["foundationdb/fdb-7_3"]
 
 [dependencies]
-pgrx = "=0.12.9"
-pgrx-sql-entity-graph = "=0.12.9"
+pgrx = "0.13.0"
+pgrx-sql-entity-graph = "0.13.0"
 foundationdb = "0.9.1"
 tokio = { version = "1", features = ["full"] }
 bytes = "*"
@@ -33,7 +33,7 @@ serde = "*"
 serde_cbor = "*"
 
 [dev-dependencies]
-pgrx-tests = "=0.12.9"
+pgrx-tests = "0.13.0"
 
 [profile.dev]
 panic = "unwind"
