@@ -1,6 +1,7 @@
 use std::borrow::Cow;
 use std::ptr;
 
+use foundationdb::tuple::Element;
 use foundationdb::{future::FdbValue, tuple::unpack, FdbResult, RangeOption};
 use futures::{stream::BoxStream, FutureExt, StreamExt, TryStreamExt};
 use pg_sys::{
@@ -119,7 +120,7 @@ unsafe extern "C" fn aminsert(
 
     // Get ID from TID
     let id = unsafe { pgrx::itemptr::item_pointer_get_block_number_no_check(*tid) };
-    
+
     // Add the ID to the key elements as the last element
     key_elements.push(foundationdb::tuple::Element::Int(id as i64));
 
@@ -269,21 +270,12 @@ unsafe extern "C" fn amgettuple(scan: IndexScanDesc, direction: ScanDirection::T
     let Ok(key_value) = result else {
         return false;
     };
-    
+
     // Unpack the key to get the tuple elements
-    let key_tuple = index_subspace.unpack(key_value.key()).unwrap_or_report();
-    
+    let key_tuple_elements: Vec<Element> = unpack(key_value.key()).unwrap_or_report();
+
     // The ID is the last element in the key tuple
-    let id_element = key_tuple.last().unwrap_or_report();
-    
-    // Extract the ID from the tuple element
-    let id: u32 = match id_element {
-        foundationdb::tuple::Element::Int(i) => (*i as u32),
-        _ => {
-            log!("IAM: Invalid ID format in index");
-            return false;
-        }
-    };
+    let id = key_tuple_elements.last().unwrap().as_i64().unwrap() as u32;
 
     // Use a fixed offset of 1 (first item in the block)
     let offset_num = 1u16;
