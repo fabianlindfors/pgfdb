@@ -319,7 +319,7 @@ unsafe extern "C" fn amrescan(
         // Process each scan key to build our prefix
         for i in 0..nkeys {
             let scan_key = &*keys.add(i as usize);
-            
+
             // Only handle equality operators (strategy number 1) for now
             if scan_key.sk_strategy != 1 {
                 log!("IAM: Only equality operators are supported for index scans");
@@ -328,7 +328,9 @@ unsafe extern "C" fn amrescan(
 
             // Get the attribute type OID
             let attr_num = scan_key.sk_attno as usize - 1; // Convert to 0-based index
-            let attr = (*index_tuple_desc).attrs.as_slice((*index_tuple_desc).natts as usize)[attr_num];
+            let attr = (*index_tuple_desc)
+                .attrs
+                .as_slice((*index_tuple_desc).natts as usize)[attr_num];
             let type_oid = attr.atttypid;
 
             // Encode the datum using our helper function
@@ -341,7 +343,10 @@ unsafe extern "C" fn amrescan(
 
         // Create a prefix-based range
         if !prefix_elements.is_empty() {
-            log!("IAM: Using prefix-based range scan with {} elements", prefix_elements.len());
+            log!(
+                "IAM: Using prefix-based range scan with {} elements",
+                prefix_elements.len()
+            );
             // Create a range that starts with our prefix and ends just before the next possible prefix
             RangeOption::from(index_subspace.subspace(&prefix_elements).range())
         } else {
