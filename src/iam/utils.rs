@@ -1,0 +1,36 @@
+use std::borrow::Cow;
+use pg_sys::{Datum, Oid};
+use pgrx::prelude::*;
+use foundationdb::tuple::Element;
+
+// Helper function to encode a Postgres datum into an FDB tuple element
+// This function will need to be implemented to handle different Postgres types
+pub fn encode_datum_for_index<'a>(
+    datum: Datum,
+    type_oid: Oid,
+) -> Option<Element<'a>> {
+    match type_oid {
+        // INT4/INTEGER (OID 23)
+        pg_sys::INT4OID => {
+            // Convert the datum to a Rust i32
+            let value = unsafe { pg_sys::DatumGetInt64(datum) };
+            Some(Element::Int(value))
+        }
+        // TEXT (OID 25) or VARCHAR (OID 1043)
+        pg_sys::VARCHAROID | pg_sys::TEXTOID => {
+            // Use pgrx's text_to_rust_str_unchecked to convert to a Rust string
+            let varlena: PgVarlena<()> = unsafe { PgVarlena::from_datum(datum) };
+            let text = unsafe { pgrx::text_to_rust_str_unchecked(varlena.into_pg()).to_string() };
+            Some(Element::String(Cow::Owned(text)))
+        }
+        // Add more types as needed
+        _ => {
+            // Log unsupported types
+            log!(
+                "IAM: encode_datum_for_index not yet implemented for type OID: {}",
+                type_oid.as_u32()
+            );
+            None
+        }
+    }
+}
