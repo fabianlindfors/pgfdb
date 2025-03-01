@@ -3,7 +3,7 @@ use std::ptr;
 
 use foundationdb::tuple::Element;
 use foundationdb::{future::FdbValue, tuple::unpack, FdbResult, RangeOption};
-use futures::{stream::BoxStream, FutureExt, StreamExt, TryStreamExt};
+use futures::{stream::BoxStream, FutureExt, StreamExt};
 use pg_sys::{
     bytea, clauselist_selectivity, get_quals_from_indexclauses, Cost, Datum, IndexAmRoutine,
     IndexBuildResult, IndexInfo, IndexPath, IndexScanDesc, IndexScanDescData, IndexUniqueCheck,
@@ -292,7 +292,7 @@ unsafe extern "C" fn amrescan(
     scan: IndexScanDesc,
     keys: ScanKey,
     nkeys: ::std::os::raw::c_int,
-    orderbys: ScanKey,
+    _orderbys: ScanKey,
     norderbys: ::std::os::raw::c_int,
 ) {
     log!(

@@ -1,9 +1,6 @@
 use std::task::{Context, Poll, Waker};
 
-use foundationdb::{
-    future::{FdbValue, FdbValues},
-    FdbResult, RangeOption,
-};
+use foundationdb::{FdbResult, RangeOption};
 use futures::{stream::BoxStream, FutureExt, StreamExt, TryStreamExt};
 use pgrx::{
     log,
