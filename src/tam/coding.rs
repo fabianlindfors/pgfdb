@@ -93,11 +93,11 @@ impl Tuple {
         for i in 0..(tts.tts_nvalid as usize) {
             if nulls[i] {
                 tuple.datums.push(None);
+            } else {
+                tuple
+                    .datums
+                    .push(Some(encode_datum(&datums[i], attrs[i].atttypid)));
             }
-
-            tuple
-                .datums
-                .push(Some(encode_datum(&datums[i], attrs[i].atttypid)));
         }
 
         tuple
