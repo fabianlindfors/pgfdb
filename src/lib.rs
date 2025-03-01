@@ -98,7 +98,7 @@ mod tests {
     }
 
     #[pg_test]
-    fn select_with_index() {
+    fn select_eq_with_index() {
         Spi::run("CREATE TABLE test (id INTEGER) USING pgfdb").unwrap();
         Spi::run("CREATE INDEX id_idx ON test USING pgfdb_idx(id)").unwrap();
 
@@ -136,6 +136,55 @@ mod tests {
         let result: Option<i64> =
             Spi::get_one("SELECT count(*) FROM test WHERE id IS NULL").unwrap();
         assert_eq!(Some(2), result);
+    }
+
+    #[pg_test]
+    fn select_eq_with_multi_column_index() {
+        Spi::run("CREATE TABLE test (id1 INTEGER, id2 INTEGER) USING pgfdb").unwrap();
+        Spi::run("CREATE INDEX id_idx ON test USING pgfdb_idx(id1, id2)").unwrap();
+        Spi::run("SET enable_seqscan=0").unwrap();
+
+        // Ensure a select on the initial column will use our index
+        let explain = Spi::explain("SELECT count(*) FROM test WHERE id1 = 1;").unwrap();
+        assert!(
+            format!("{:?}", explain).contains("Index Name"),
+            "expected query plan to use index: {:?}",
+            explain.0.to_string()
+        );
+
+        // Ensure querying using the index returns the correct results
+        Spi::run("INSERT INTO test(id1, id2) VALUES (1, 1), (1, 2), (2, 1)").unwrap();
+        let result: Option<i64> = Spi::get_one("SELECT count(*) FROM test WHERE id1 = 1").unwrap();
+        assert_eq!(Some(2), result);
+
+        // Ensure a select on the second column does not use index
+        let explain = Spi::explain("SELECT count(*) FROM test WHERE id2 = 1").unwrap();
+        assert!(
+            !format!("{:?}", explain).contains("Index Name"),
+            "expected query plan to not use index: {:?}",
+            explain.0.to_string()
+        );
+
+        // Ensure a select on both columns will use our index
+        let explain = Spi::explain("SELECT count(*) FROM test WHERE id1 = 1 AND id2 = 2").unwrap();
+        assert!(
+            format!("{:?}", explain).contains("Index Name"),
+            "expected query plan to use index: {:?}",
+            explain.0.to_string()
+        );
+
+        // Ensure querying on both columns using the index returns the correct results
+        let result: Option<i64> =
+            Spi::get_one("SELECT count(*) FROM test WHERE id1 = 1 AND id2 = 2").unwrap();
+        assert_eq!(Some(1), result);
+
+        // Ensure an OR select on both columns will not use our index
+        let explain = Spi::explain("SELECT count(*) FROM test WHERE id1 = 1 OR id2 = 2").unwrap();
+        assert!(
+            !format!("{:?}", explain).contains("Index Name"),
+            "expected query plan to not use index: {:?}",
+            explain.0.to_string()
+        );
     }
 
     #[pg_test]
