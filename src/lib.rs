@@ -2,7 +2,7 @@
 
 use std::env;
 
-use pg_sys::RegisterXactCallback;
+use pgrx::pg_sys::RegisterXactCallback;
 use pgrx::prelude::*;
 
 ::pgrx::pg_module_magic!();
@@ -70,8 +70,8 @@ mod tests {
     }
 
     #[pg_test]
-    fn heap_index() {
-        // Create table with a primary key index (will be regular Postgres index)
+    fn select_with_heap_index() {
+        // Create table with a primary key index (will be a regular Postgres index)
         Spi::run("CREATE TABLE test (id INTEGER PRIMARY KEY) USING pgfdb").unwrap();
         Spi::run("INSERT INTO test (id) VALUES (1), (2), (3), (4)").unwrap();
 
@@ -85,9 +85,36 @@ mod tests {
     }
 
     #[pg_test]
-    fn index() {
+    fn create_index() {
         Spi::run("CREATE TABLE test (id INTEGER) USING pgfdb").unwrap();
         Spi::run("CREATE INDEX id_idx ON test USING pgfdb_idx(id)").unwrap();
+    }
+
+    #[pg_test]
+    fn insert_with_index() {
+        Spi::run("CREATE TABLE test (id INTEGER) USING pgfdb").unwrap();
+        Spi::run("CREATE INDEX id_idx ON test USING pgfdb_idx(id)").unwrap();
+        Spi::run("INSERT INTO test(id) VALUES (1)").unwrap();
+    }
+
+    #[pg_test]
+    fn select_with_index() {
+        Spi::run("CREATE TABLE test (id INTEGER) USING pgfdb").unwrap();
+        Spi::run("CREATE INDEX id_idx ON test USING pgfdb_idx(id)").unwrap();
+
+        // Ensure the select will use our index
+        Spi::run("SET enable_seqscan=0").unwrap();
+        let explain = Spi::explain("SELECT count(*) FROM test WHERE id = 1;").unwrap();
+        assert!(
+            format!("{:?}", explain).contains("Index Name"),
+            "expected query plan to use index: {:?}",
+            explain.0.to_string()
+        );
+
+        // Ensure querying using the index returns the correct results
+        Spi::run("INSERT INTO test(id) VALUES (1), (1), (2)").unwrap();
+        let result: Option<i64> = Spi::get_one("SELECT count(*) FROM test WHERE id = 1").unwrap();
+        assert_eq!(Some(2), result);
     }
 }
 
