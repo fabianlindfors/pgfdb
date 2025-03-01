@@ -16,7 +16,6 @@ use pgrx::{callconv::BoxRet, pg_sys::panic::ErrorReportable};
 use pgrx_sql_entity_graph::metadata::{
     ArgumentError, Returns, ReturnsError, SqlMapping, SqlTranslatable,
 };
-use pollster;
 use std::task::{Context, Poll, Waker};
 
 #[pg_extern(sql = "
