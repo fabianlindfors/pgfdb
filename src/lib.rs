@@ -202,9 +202,29 @@ mod tests {
         );
 
         // Ensure querying using the index returns the correct results
-        Spi::run("INSERT INTO test(id) VALUES (1), (1), (2), (3)").unwrap();
+        Spi::run("INSERT INTO test(id) VALUES (1), (1), (2), (2), (3), (3)").unwrap();
         let result: Option<i64> = Spi::get_one("SELECT count(*) FROM test WHERE id < 2").unwrap();
         assert_eq!(Some(2), result);
+    }
+
+    #[pg_test]
+    fn select_lte_with_index() {
+        Spi::run("CREATE TABLE test (id INTEGER) USING pgfdb").unwrap();
+        Spi::run("CREATE INDEX id_idx ON test USING pgfdb_idx(id)").unwrap();
+
+        // Ensure the select will use our index
+        Spi::run("SET enable_seqscan=0").unwrap();
+        let explain = Spi::explain("SELECT count(*) FROM test WHERE id <= 2;").unwrap();
+        assert!(
+            format!("{:?}", explain).contains("Index Name"),
+            "expected query plan to use index: {:?}",
+            explain.0.to_string()
+        );
+
+        // Ensure querying using the index returns the correct results
+        Spi::run("INSERT INTO test(id) VALUES (1), (1), (2), (2), (3), (3)").unwrap();
+        let result: Option<i64> = Spi::get_one("SELECT count(*) FROM test WHERE id <= 2").unwrap();
+        assert_eq!(Some(4), result);
     }
 
     #[pg_test]
@@ -222,8 +242,8 @@ mod tests {
         );
 
         // Ensure querying using the index returns the correct results
-        Spi::run("INSERT INTO test(id) VALUES (1), (1), (2), (3)").unwrap();
-        let result: Option<i64> = Spi::get_one("SELECT count(*) FROM test WHERE id > 1").unwrap();
+        Spi::run("INSERT INTO test(id) VALUES (1), (1), (2), (2), (3), (3)").unwrap();
+        let result: Option<i64> = Spi::get_one("SELECT count(*) FROM test WHERE id > 2").unwrap();
         assert_eq!(Some(2), result);
     }
 
@@ -242,9 +262,9 @@ mod tests {
         );
 
         // Ensure querying using the index returns the correct results
-        Spi::run("INSERT INTO test(id) VALUES (1), (1), (2), (3)").unwrap();
+        Spi::run("INSERT INTO test(id) VALUES (1), (1), (2), (2), (3), (3)").unwrap();
         let result: Option<i64> = Spi::get_one("SELECT count(*) FROM test WHERE id >= 2").unwrap();
-        assert_eq!(Some(2), result);
+        assert_eq!(Some(4), result);
     }
 }
 

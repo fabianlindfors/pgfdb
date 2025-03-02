@@ -229,39 +229,42 @@ fn range_option_for_scan<'a>(
     };
 
     // Based on what the operator (strategy) is for the final key, construct the final search range
-    let range = match last.sk_strategy {
+    match last.sk_strategy {
         // Strategy 1: Less than (<)
         1 => {
-            // For greater than, we need to start from the element and go to the end of the subspace
-            let start_key = base_subspace.range().0;
-            let end_key = KeySelector::last_less_than(base_subspace.pack(&element))
-                .key()
-                .to_vec();
-            (start_key, end_key)
+            let start_key = KeySelector::first_greater_or_equal(base_subspace.range().0);
+            let end_key = KeySelector::last_less_than(base_subspace.subspace(&element).range().1);
+            RangeOption::from((start_key, end_key))
+        }
+        // Strategy 2: Less than or equal (<=)
+        2 => {
+            let start_key = KeySelector::first_greater_or_equal(base_subspace.range().0);
+            // End is exclusive in ranges so we need to use this key selector to include the element value
+            let end_key =
+                KeySelector::first_greater_than(base_subspace.subspace(&element).range().1);
+            RangeOption::from((start_key, end_key))
         }
         // Strategy 0: IS NULL check
         // Strategy 3: Equality (=)
-        0 | 3 => base_subspace.subspace(&element).range(),
+        0 | 3 => RangeOption::from(base_subspace.subspace(&element).range()),
         // Strategy 4: Greater than or equal (>=)
         4 => {
             // For greater than or equal, we start from the element itself
-            let start_key = base_subspace.pack(&element);
-            let end_key = base_subspace.range().1;
-            (start_key, end_key)
+            let start_key =
+                KeySelector::first_greater_or_equal(base_subspace.subspace(&element).range().0);
+            let end_key = KeySelector::first_greater_than(base_subspace.range().1);
+            RangeOption::from((start_key, end_key))
         }
         // Strategy 5: Greater than (>)
         5 => {
             // For greater than, we need to start from the element and go to the end of the subspace
-            let start_key = KeySelector::first_greater_than(base_subspace.pack(&element))
-                .key()
-                .to_vec();
-            let end_key = base_subspace.range().1;
-            (start_key, end_key)
+            let start_key =
+                KeySelector::first_greater_than(base_subspace.subspace(&element).range().1);
+            let end_key = KeySelector::first_greater_than(base_subspace.range().1);
+            RangeOption::from((start_key, end_key))
         }
         _ => panic!("Unsupported strategy for scan key {}", last.sk_strategy),
-    };
-
-    RangeOption::from(range)
+    }
 }
 
 // End an index scan
