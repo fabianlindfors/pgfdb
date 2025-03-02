@@ -242,6 +242,13 @@ fn range_option_for_scan<'a>(
             let end_key = base_subspace.range().1;
             (start_key, end_key)
         }
+        // Strategy 3: Greater than or equal (>=)
+        3 => {
+            // For greater than or equal, we start from the element itself
+            let start_key = base_subspace.pack(&element);
+            let end_key = base_subspace.range().1;
+            (start_key, end_key)
+        }
         _ => panic!("Unsupported strategy for scan key {}", last.sk_strategy),
     };
 

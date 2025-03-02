@@ -24,7 +24,8 @@ use std::ptr;
     CREATE OPERATOR CLASS pgfdb_idx_integer 
     DEFAULT FOR TYPE INTEGER USING pgfdb_idx AS
     OPERATOR 1 = (INTEGER, INTEGER),
-    OPERATOR 2 > (INTEGER, INTEGER);
+    OPERATOR 2 > (INTEGER, INTEGER),
+    OPERATOR 3 >= (INTEGER, INTEGER);
     
     CREATE OPERATOR CLASS pgfdb_idx_text
     DEFAULT FOR TYPE TEXT USING pgfdb_idx AS
@@ -84,7 +85,8 @@ unsafe impl BoxRet for IndexAmHandler {
         // Strategies:
         // 1: =
         // 2: >
-        index_am_routine.amstrategies = 2;
+        // 3: >=
+        index_am_routine.amstrategies = 3;
 
         index_am_routine.amsupport = 0;
         index_am_routine.amoptsprocnum = 0;
