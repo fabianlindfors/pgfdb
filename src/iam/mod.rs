@@ -23,7 +23,8 @@ use std::ptr;
     -- Operator classes
     CREATE OPERATOR CLASS pgfdb_idx_integer 
     DEFAULT FOR TYPE INTEGER USING pgfdb_idx AS
-    OPERATOR 1 = (INTEGER, INTEGER);
+    OPERATOR 1 = (INTEGER, INTEGER),
+    OPERATOR 2 > (INTEGER, INTEGER);
     
     CREATE OPERATOR CLASS pgfdb_idx_text
     DEFAULT FOR TYPE TEXT USING pgfdb_idx AS
@@ -80,9 +81,10 @@ unsafe impl BoxRet for IndexAmHandler {
         index_am_routine.aminitparallelscan = None;
         index_am_routine.amparallelrescan = None;
 
-        // Stategies:
+        // Strategies:
         // 1: =
-        index_am_routine.amstrategies = 1;
+        // 2: >
+        index_am_routine.amstrategies = 2;
 
         index_am_routine.amsupport = 0;
         index_am_routine.amoptsprocnum = 0;

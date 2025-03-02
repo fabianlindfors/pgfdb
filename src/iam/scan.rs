@@ -2,6 +2,7 @@ use core::slice;
 use std::task::{Context, Poll, Waker};
 
 use foundationdb::tuple::{Element, Subspace};
+use foundationdb::KeySelector;
 use foundationdb::{future::FdbValue, tuple::unpack, FdbResult, RangeOption};
 use futures::{stream::BoxStream, FutureExt, StreamExt};
 use pg_sys::{
@@ -229,9 +230,18 @@ fn range_option_for_scan<'a>(
 
     // Based on what the operator (strategy) is for the final key, construct the final search range
     let range = match last.sk_strategy {
-        // Stategy 0: IS NULL check
-        // Stategy 1: Equality (=)
+        // Strategy 0: IS NULL check
+        // Strategy 1: Equality (=)
         0 | 1 => base_subspace.subspace(&element).range(),
+        // Strategy 2: Greater than (>)
+        2 => {
+            // For greater than, we need to start from the element and go to the end of the subspace
+            let start_key = KeySelector::first_greater_than(base_subspace.pack(&element))
+                .key()
+                .to_vec();
+            let end_key = base_subspace.range().1;
+            (start_key, end_key)
+        }
         _ => panic!("Unsupported strategy for scan key {}", last.sk_strategy),
     };
 

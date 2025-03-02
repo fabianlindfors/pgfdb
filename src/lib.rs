@@ -188,7 +188,7 @@ mod tests {
     }
 
     #[pg_test]
-    fn select_gte_with_index() {
+    fn select_gt_with_index() {
         Spi::run("CREATE TABLE test (id INTEGER) USING pgfdb").unwrap();
         Spi::run("CREATE INDEX id_idx ON test USING pgfdb_idx(id)").unwrap();
 
