@@ -23,6 +23,7 @@ use std::ptr;
     -- Operator classes
     CREATE OPERATOR CLASS pgfdb_idx_integer 
     DEFAULT FOR TYPE INTEGER USING pgfdb_idx AS
+    OPERATOR 1 < (INTEGER, INTEGER),
     OPERATOR 3 = (INTEGER, INTEGER),
     OPERATOR 4 >= (INTEGER, INTEGER),
     OPERATOR 5 > (INTEGER, INTEGER);

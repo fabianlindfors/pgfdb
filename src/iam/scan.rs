@@ -230,6 +230,15 @@ fn range_option_for_scan<'a>(
 
     // Based on what the operator (strategy) is for the final key, construct the final search range
     let range = match last.sk_strategy {
+        // Strategy 1: Less than (<)
+        1 => {
+            // For greater than, we need to start from the element and go to the end of the subspace
+            let start_key = base_subspace.range().0;
+            let end_key = KeySelector::last_less_than(base_subspace.pack(&element))
+                .key()
+                .to_vec();
+            (start_key, end_key)
+        }
         // Strategy 0: IS NULL check
         // Strategy 3: Equality (=)
         0 | 3 => base_subspace.subspace(&element).range(),
