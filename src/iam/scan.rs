@@ -194,8 +194,8 @@ fn range_option_for_scan<'a>(
     // can use a non-equality operator.
     for head_scan_key in head {
         // Must use equality operator (we can probably support inequality as well by splitting into more ranges)
-        if head_scan_key.sk_strategy != 1 {
-            panic!("IAM: Only equality operators are supported for index scans");
+        if head_scan_key.sk_strategy != 3 {
+            panic!("IAM: Only equality operators are supported for multi-column index scans on non-final scan keys");
         }
 
         let attr = attrs[head_scan_key.sk_attno as usize - 1];
@@ -231,21 +231,21 @@ fn range_option_for_scan<'a>(
     // Based on what the operator (strategy) is for the final key, construct the final search range
     let range = match last.sk_strategy {
         // Strategy 0: IS NULL check
-        // Strategy 1: Equality (=)
-        0 | 1 => base_subspace.subspace(&element).range(),
-        // Strategy 2: Greater than (>)
-        2 => {
+        // Strategy 3: Equality (=)
+        0 | 3 => base_subspace.subspace(&element).range(),
+        // Strategy 4: Greater than or equal (>=)
+        4 => {
+            // For greater than or equal, we start from the element itself
+            let start_key = base_subspace.pack(&element);
+            let end_key = base_subspace.range().1;
+            (start_key, end_key)
+        }
+        // Strategy 5: Greater than (>)
+        5 => {
             // For greater than, we need to start from the element and go to the end of the subspace
             let start_key = KeySelector::first_greater_than(base_subspace.pack(&element))
                 .key()
                 .to_vec();
-            let end_key = base_subspace.range().1;
-            (start_key, end_key)
-        }
-        // Strategy 3: Greater than or equal (>=)
-        3 => {
-            // For greater than or equal, we start from the element itself
-            let start_key = base_subspace.pack(&element);
             let end_key = base_subspace.range().1;
             (start_key, end_key)
         }
