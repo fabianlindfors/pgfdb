@@ -1,6 +1,7 @@
+use core::slice;
 use std::task::{Context, Poll, Waker};
 
-use foundationdb::tuple::Element;
+use foundationdb::tuple::{Element, Subspace};
 use foundationdb::{future::FdbValue, tuple::unpack, FdbResult, RangeOption};
 use futures::{stream::BoxStream, FutureExt, StreamExt};
 use pg_sys::{
@@ -10,6 +11,7 @@ use pg_sys::{
 };
 use pgrx::itemptr::item_pointer_set_all;
 use pgrx::pg_sys::panic::ErrorReportable;
+use pgrx::pg_sys::{FormData_pg_attribute, ScanKeyData, SK_ISNULL};
 use pgrx::prelude::*;
 
 use crate::iam::utils::encode_datum_for_index;
@@ -138,6 +140,7 @@ pub unsafe extern "C" fn amgettuple(scan: IndexScanDesc, direction: ScanDirectio
 }
 
 // Restart a scan with new scan keys
+#[pg_guard]
 pub unsafe extern "C" fn amrescan(
     scan: IndexScanDesc,
     keys: ScanKey,
@@ -151,69 +154,88 @@ pub unsafe extern "C" fn amrescan(
         norderbys
     );
 
-    let fdb_scan = scan as *mut FdbIndexScan;
     let index_relation = (*scan).indexRelation;
+    let index_tuple_desc = (*index_relation).rd_att;
+    let attrs = (*index_tuple_desc)
+        .attrs
+        .as_slice((*index_tuple_desc).natts as usize);
+    let scan_keys = slice::from_raw_parts(keys, nkeys as usize);
+
+    // Construct a range option representing what part of the index we need to iterate over based on the scan keys
     let index_oid = (*index_relation).rd_id;
     let index_subspace = crate::subspace::index(index_oid);
-
-    // Get the transaction
-    let txn = crate::transaction::get_transaction();
-
-    // Create a range based on the scan keys
-    let range_option = if nkeys > 0 {
-        // We have scan keys, so create a prefix-based range
-        let index_tuple_desc = (*index_relation).rd_att;
-        let mut prefix_elements = Vec::with_capacity(nkeys as usize);
-
-        // Process each scan key to build our prefix
-        for i in 0..nkeys {
-            let scan_key = &*keys.add(i as usize);
-
-            // Only handle equality operators (strategy number 1) for now
-            if scan_key.sk_strategy != 1 {
-                log!("IAM: Only equality operators are supported for index scans");
-                continue;
-            }
-
-            // Get the attribute type OID
-            let attr_num = scan_key.sk_attno as usize - 1; // Convert to 0-based index
-            let attr = (*index_tuple_desc)
-                .attrs
-                .as_slice((*index_tuple_desc).natts as usize)[attr_num];
-            let type_oid = attr.atttypid;
-
-            // Encode the datum using our helper function
-            if let Some(element) = encode_datum_for_index(scan_key.sk_argument, type_oid) {
-                prefix_elements.push(element);
-            } else {
-                log!("IAM: Failed to encode scan key datum for index");
-            }
-        }
-
-        // Create a prefix-based range
-        if !prefix_elements.is_empty() {
-            log!(
-                "IAM: Using prefix-based range scan with {} elements",
-                prefix_elements.len()
-            );
-            // Create a range that starts with our prefix and ends just before the next possible prefix
-            RangeOption::from(index_subspace.subspace(&prefix_elements).range())
-        } else {
-            // Fall back to full range if we couldn't create a prefix
-            RangeOption::from(index_subspace.range())
-        }
-    } else {
-        // No scan keys, so scan the entire index
-        RangeOption::from(index_subspace.range())
-    };
+    let range_option = range_option_for_scan(index_subspace, scan_keys, attrs);
 
     // Create a stream of key-value pairs from FDB
+    let txn = crate::transaction::get_transaction();
     let stream = txn.get_ranges_keyvalues(range_option, false).boxed();
 
     // Replace the existing stream
     // First, drop the old stream to avoid leaking resources
+    let fdb_scan = scan as *mut FdbIndexScan;
     let old_stream = std::ptr::replace(&mut (*fdb_scan).values, stream);
     drop(old_stream);
+}
+
+fn range_option_for_scan<'a>(
+    index_subspace: Subspace,
+    scan_keys: &'a [ScanKeyData],
+    attrs: &'a [FormData_pg_attribute],
+) -> RangeOption<'a> {
+    // This should never happen but if there are no scan keys, we scan the entire index
+    let [head @ .., last] = scan_keys else {
+        return RangeOption::from(index_subspace.range());
+    };
+
+    let mut head_tuple_elements: Vec<Element> = Vec::with_capacity(head.len());
+
+    // If there are more than one scan key (i.e. multi-column index), then only the final scan key
+    // can use a non-equality operator.
+    for head_scan_key in head {
+        // Must use equality operator (we can probably support inequality as well by splitting into more ranges)
+        if head_scan_key.sk_strategy != 1 {
+            panic!("IAM: Only equality operators are supported for index scans");
+        }
+
+        let attr = attrs[head_scan_key.sk_attno as usize - 1];
+        if let Some(element) = encode_datum_for_index(head_scan_key.sk_argument, attr.atttypid) {
+            head_tuple_elements.push(element);
+        } else {
+            panic!("IAM: Failed to encode scan key datum for index");
+        }
+    }
+
+    // If we have a multi-column index and query, we will now have some `head_tuple_elements`
+    // and can create a new prefix for our search
+    let base_subspace = if head_tuple_elements.is_empty() {
+        index_subspace
+    } else {
+        index_subspace.subspace(&head_tuple_elements)
+    };
+
+    // We are now at the final part of the range building for the final column of the scan keys.
+    // Here we can support more than just equality by building different ranges to scan.
+    let attr = attrs[last.sk_attno as usize - 1];
+
+    let element = if last.sk_flags as u32 & SK_ISNULL != 0 {
+        // If this is an IS NULL check, we shouldn't encode and instead just use the tuple nil value
+        Element::Nil
+    } else {
+        match encode_datum_for_index(last.sk_argument, attr.atttypid) {
+            Some(element) => element,
+            None => panic!("IAM: Failed to encode scan key datum for index"),
+        }
+    };
+
+    // Based on what the operator (strategy) is for the final key, construct the final search range
+    let range = match last.sk_strategy {
+        // Stategy 0: IS NULL check
+        // Stategy 1: Equality (=)
+        0 | 1 => base_subspace.subspace(&element).range(),
+        _ => panic!("Unsupported strategy for scan key {}", last.sk_strategy),
+    };
+
+    RangeOption::from(range)
 }
 
 // End an index scan
