@@ -119,9 +119,7 @@ pub unsafe extern "C" fn amgettuple(scan: IndexScanDesc, direction: ScanDirectio
         return false;
     };
 
-    let Ok(key_value) = result else {
-        return false;
-    };
+    let key_value = result.unwrap_or_report();
 
     // Unpack the key to get the tuple elements
     let key_tuple_elements: Vec<Element> = unpack(key_value.key()).unwrap_or_report();
@@ -132,9 +130,17 @@ pub unsafe extern "C" fn amgettuple(scan: IndexScanDesc, direction: ScanDirectio
     // Use a fixed offset of 1 (first item in the block)
     let offset_num = 1u16;
 
-    // Set the ItemPointer in the scan
     unsafe {
-        item_pointer_set_all(&mut (*scan).xs_heaptid, id, offset_num);
+        // Store back the ID to be looked up by the table access method
+        // TODO: Optimise this somehow so the TAM doesn't have to do serialised point lookups
+        item_pointer_set_all(&mut (*fdb_scan).base.xs_heaptid, id, offset_num);
+
+        // Recheck is probbaly not necessary but the NULL handling right now probably requires it
+        (*fdb_scan).base.xs_recheck = true;
+        (*fdb_scan).base.xs_recheckorderby = true;
+
+        // This we might be able to check more effectively
+        (*fdb_scan).base.xs_heap_continue = true;
     }
 
     true

@@ -79,6 +79,7 @@ unsafe impl BoxRet for IndexAmHandler {
 
         // Bitmap scans not supported
         index_am_routine.amgetbitmap = None;
+
         // Parallel scans not supported
         index_am_routine.amestimateparallelscan = None;
         index_am_routine.aminitparallelscan = None;
