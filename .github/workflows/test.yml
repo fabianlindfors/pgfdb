@@ -1,4 +1,4 @@
-name: Run tests
+name: Tests
 
 on:
   push:
@@ -27,7 +27,7 @@ jobs:
           wget https://github.com/apple/foundationdb/releases/download/7.1.25/foundationdb-server_7.1.25-1_amd64.deb
           sudo dpkg -i foundationdb-clients_7.1.25-1_amd64.deb foundationdb-server_7.1.25-1_amd64.deb
           sudo service foundationdb start
-          fdbcli --exec "configure new single memory"
+          fdbcli --exec "configure single memory"
 
       - name: Install and initialize cargo-pgrx
         run: |
