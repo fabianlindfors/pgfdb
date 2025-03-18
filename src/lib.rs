@@ -104,6 +104,7 @@ mod tests {
         let cases = vec![
             ("INTEGER", INTEGER_TEST_VALUES),
             ("BIGINT", INTEGER_TEST_VALUES),
+            ("SMALLINT", INTEGER_TEST_VALUES),
         ];
 
         for (column_type, (value1, value2, _)) in cases {
@@ -148,6 +149,7 @@ mod tests {
         let cases = vec![
             ("INTEGER", INTEGER_TEST_VALUES),
             ("BIGINT", INTEGER_TEST_VALUES),
+            ("SMALLINT", INTEGER_TEST_VALUES),
         ];
 
         for (column_type, (value1, value2, value3)) in cases {
@@ -192,6 +194,7 @@ mod tests {
         let cases = vec![
             ("INTEGER", INTEGER_TEST_VALUES),
             ("BIGINT", INTEGER_TEST_VALUES),
+            ("SMALLINT", INTEGER_TEST_VALUES),
         ];
 
         for (column_type, (value1, value2, value3)) in cases {
@@ -236,6 +239,7 @@ mod tests {
         let cases = vec![
             ("INTEGER", INTEGER_TEST_VALUES),
             ("BIGINT", INTEGER_TEST_VALUES),
+            ("SMALLINT", INTEGER_TEST_VALUES),
         ];
 
         for (column_type, (value1, value2, value3)) in cases {
@@ -280,6 +284,7 @@ mod tests {
         let cases = vec![
             ("INTEGER", INTEGER_TEST_VALUES),
             ("BIGINT", INTEGER_TEST_VALUES),
+            ("SMALLINT", INTEGER_TEST_VALUES),
         ];
 
         for (column_type, (value1, value2, value3)) in cases {

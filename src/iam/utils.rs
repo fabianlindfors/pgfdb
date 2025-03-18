@@ -16,6 +16,12 @@ pub fn encode_datum_for_index<'a>(
             let value = unsafe { pg_sys::DatumGetInt64(datum) };
             Some(Element::Int(value))
         }
+        // SMALLINT (OID 21)
+        pg_sys::INT2OID => {
+            // Convert the datum to a Rust i16, then to i64 for storage
+            let value = unsafe { pg_sys::DatumGetInt16(datum) as i64 };
+            Some(Element::Int(value))
+        },
         // BIGINT (OID 20)
         pg_sys::INT8OID => {
             // Convert the datum to a Rust i64
