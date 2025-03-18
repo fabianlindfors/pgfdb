@@ -101,7 +101,10 @@ mod tests {
 
     #[pg_test]
     fn select_eq_with_index() {
-        let cases = vec![("INTEGER", INTEGER_TEST_VALUES)];
+        let cases = vec![
+            ("INTEGER", INTEGER_TEST_VALUES),
+            ("BIGINT", INTEGER_TEST_VALUES),
+        ];
 
         for (column_type, (value1, value2, _)) in cases {
             let table = format!("test_{}", column_type.to_lowercase());
@@ -142,7 +145,10 @@ mod tests {
 
     #[pg_test]
     fn select_lt_with_index() {
-        let cases = vec![("INTEGER", INTEGER_TEST_VALUES)];
+        let cases = vec![
+            ("INTEGER", INTEGER_TEST_VALUES),
+            ("BIGINT", INTEGER_TEST_VALUES),
+        ];
 
         for (column_type, (value1, value2, value3)) in cases {
             let table = format!("test_{}", column_type.to_lowercase());
@@ -183,7 +189,10 @@ mod tests {
 
     #[pg_test]
     fn select_lte_with_index() {
-        let cases = vec![("INTEGER", INTEGER_TEST_VALUES)];
+        let cases = vec![
+            ("INTEGER", INTEGER_TEST_VALUES),
+            ("BIGINT", INTEGER_TEST_VALUES),
+        ];
 
         for (column_type, (value1, value2, value3)) in cases {
             let table = format!("test_{}", column_type.to_lowercase());
@@ -224,7 +233,10 @@ mod tests {
 
     #[pg_test]
     fn select_gt_with_index() {
-        let cases = vec![("INTEGER", INTEGER_TEST_VALUES)];
+        let cases = vec![
+            ("INTEGER", INTEGER_TEST_VALUES),
+            ("BIGINT", INTEGER_TEST_VALUES),
+        ];
 
         for (column_type, (value1, value2, value3)) in cases {
             let table = format!("test_{}", column_type.to_lowercase());
@@ -265,7 +277,10 @@ mod tests {
 
     #[pg_test]
     fn select_gte_with_index() {
-        let cases = vec![("INTEGER", INTEGER_TEST_VALUES)];
+        let cases = vec![
+            ("INTEGER", INTEGER_TEST_VALUES),
+            ("BIGINT", INTEGER_TEST_VALUES),
+        ];
 
         for (column_type, (value1, value2, value3)) in cases {
             let table = format!("test_{}", column_type.to_lowercase());
