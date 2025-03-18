@@ -1,0 +1,38 @@
+name: Run tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    name: Run tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
+
+      - name: Install and start FoundationDB
+        run: |
+          wget https://github.com/apple/foundationdb/releases/download/7.1.25/foundationdb-clients_7.1.25-1_amd64.deb
+          wget https://github.com/apple/foundationdb/releases/download/7.1.25/foundationdb-server_7.1.25-1_amd64.deb
+          sudo dpkg -i foundationdb-clients_7.1.25-1_amd64.deb foundationdb-server_7.1.25-1_amd64.deb
+          sudo service foundationdb start
+          fdbcli --exec "configure new single memory"
+
+      - name: Install and initialize cargo-pgrx
+        run: |
+          cargo install cargo-pgrx
+          cargo pgrx init --pg17 download
+
+      - name: Run tests
+        run: cargo pgrx test
