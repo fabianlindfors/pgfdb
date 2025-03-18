@@ -97,24 +97,159 @@ mod tests {
         Spi::run("INSERT INTO test(id) VALUES (1)").unwrap();
     }
 
+    const INTEGER_TEST_VALUES: (&'static str, &'static str, &'static str) = ("1", "2", "3");
+
     #[pg_test]
     fn select_eq_with_index() {
+        let cases = vec![("INTEGER", INTEGER_TEST_VALUES)];
+
+        for (column_type, (value1, value2, _)) in cases {
+            Spi::run(&format!("CREATE TABLE test (id {column_type}) USING pgfdb")).unwrap();
+            Spi::run("CREATE INDEX id_idx ON test USING pgfdb_idx(id)").unwrap();
+
+            // Ensure the select will use our index
+            Spi::run("SET enable_seqscan=0").unwrap();
+            let explain =
+                Spi::explain(&format!("SELECT count(*) FROM test WHERE id = {value1}")).unwrap();
+            assert!(
+                format!("{:?}", explain).contains("Index Name"),
+                "expected query plan to use index: {:?}",
+                explain.0.to_string()
+            );
+
+            // Ensure querying using the index returns the correct results
+            Spi::run(&format!(
+                "INSERT INTO test(id) VALUES ({value1}), ({value1}), ({value2})"
+            ))
+            .unwrap();
+            let result: Option<i64> =
+                Spi::get_one(&format!("SELECT count(*) FROM test WHERE id = {value1}")).unwrap();
+            assert_eq!(Some(2), result);
+        }
+    }
+
+    #[pg_test]
+    fn select_lt_with_index() {
+        let cases = vec![("INTEGER", INTEGER_TEST_VALUES)];
+
+        for (column_type, (value1, value2, value3)) in cases {
+            Spi::run(&format!("CREATE TABLE test (id {column_type}) USING pgfdb")).unwrap();
+            Spi::run("CREATE INDEX id_idx ON test USING pgfdb_idx(id)").unwrap();
+
+            // Ensure the select will use our index
+            Spi::run("SET enable_seqscan=0").unwrap();
+            let explain =
+                Spi::explain(&format!("SELECT count(*) FROM test WHERE id < {value2}")).unwrap();
+            assert!(
+                format!("{:?}", explain).contains("Index Name"),
+                "expected query plan to use index: {:?}",
+                explain.0.to_string()
+            );
+
+            // Ensure querying using the index returns the correct results
+            Spi::run(&format!("INSERT INTO test(id) VALUES ({value1}), ({value1}), ({value2}), ({value2}), ({value3}), ({value3})")).unwrap();
+            let result: Option<i64> =
+                Spi::get_one(&format!("SELECT count(*) FROM test WHERE id < {value2}")).unwrap();
+            assert_eq!(Some(2), result);
+        }
+    }
+
+    #[pg_test]
+    fn select_lte_with_index() {
+        let cases = vec![("INTEGER", INTEGER_TEST_VALUES)];
+
+        for (column_type, (value1, value2, value3)) in cases {
+            Spi::run(&format!("CREATE TABLE test (id {column_type}) USING pgfdb")).unwrap();
+            Spi::run("CREATE INDEX id_idx ON test USING pgfdb_idx(id)").unwrap();
+
+            // Ensure the select will use our index
+            Spi::run("SET enable_seqscan=0").unwrap();
+            let explain =
+                Spi::explain(&format!("SELECT count(*) FROM test WHERE id <= {value2}")).unwrap();
+            assert!(
+                format!("{:?}", explain).contains("Index Name"),
+                "expected query plan to use index: {:?}",
+                explain.0.to_string()
+            );
+
+            // Ensure querying using the index returns the correct results
+            Spi::run(&format!("INSERT INTO test(id) VALUES ({value1}), ({value1}), ({value2}), ({value2}), ({value3}), ({value3})")).unwrap();
+            let result: Option<i64> =
+                Spi::get_one(&format!("SELECT count(*) FROM test WHERE id <= {value2}")).unwrap();
+            assert_eq!(Some(4), result);
+        }
+    }
+
+    #[pg_test]
+    fn select_gt_with_index() {
+        let cases = vec![("INTEGER", INTEGER_TEST_VALUES)];
+
+        for (column_type, (value1, value2, value3)) in cases {
+            Spi::run(&format!("CREATE TABLE test (id {column_type}) USING pgfdb")).unwrap();
+            Spi::run("CREATE INDEX id_idx ON test USING pgfdb_idx(id)").unwrap();
+
+            // Ensure the select will use our index
+            Spi::run("SET enable_seqscan=0").unwrap();
+            let explain =
+                Spi::explain(&format!("SELECT count(*) FROM test WHERE id > {value1}")).unwrap();
+            assert!(
+                format!("{:?}", explain).contains("Index Name"),
+                "expected query plan to use index: {:?}",
+                explain.0.to_string()
+            );
+
+            // Ensure querying using the index returns the correct results
+            Spi::run(&format!("INSERT INTO test(id) VALUES ({value1}), ({value1}), ({value2}), ({value2}), ({value3}), ({value3})")).unwrap();
+            let result: Option<i64> =
+                Spi::get_one(&format!("SELECT count(*) FROM test WHERE id > {value2}")).unwrap();
+            assert_eq!(Some(2), result);
+        }
+    }
+
+    #[pg_test]
+    fn select_gte_with_index() {
+        let cases = vec![("INTEGER", INTEGER_TEST_VALUES)];
+
+        for (column_type, (value1, value2, value3)) in cases {
+            Spi::run(&format!("CREATE TABLE test (id {column_type}) USING pgfdb")).unwrap();
+            Spi::run("CREATE INDEX id_idx ON test USING pgfdb_idx(id)").unwrap();
+
+            // Ensure the select will use our index
+            Spi::run("SET enable_seqscan=0").unwrap();
+            let explain =
+                Spi::explain(&format!("SELECT count(*) FROM test WHERE id >= {value2}")).unwrap();
+            assert!(
+                format!("{:?}", explain).contains("Index Name"),
+                "expected query plan to use index: {:?}",
+                explain.0.to_string()
+            );
+
+            // Ensure querying using the index returns the correct results
+            Spi::run(&format!("INSERT INTO test(id) VALUES ({value1}), ({value1}), ({value2}), ({value2}), ({value3}), ({value3})")).unwrap();
+            let result: Option<i64> =
+                Spi::get_one(&format!("SELECT count(*) FROM test WHERE id >= {value2}")).unwrap();
+            assert_eq!(Some(4), result);
+        }
+    }
+
+    #[pg_test]
+    fn select_lt_on_nulls_with_index() {
         Spi::run("CREATE TABLE test (id INTEGER) USING pgfdb").unwrap();
         Spi::run("CREATE INDEX id_idx ON test USING pgfdb_idx(id)").unwrap();
 
         // Ensure the select will use our index
         Spi::run("SET enable_seqscan=0").unwrap();
-        let explain = Spi::explain("SELECT count(*) FROM test WHERE id = 1;").unwrap();
+        let explain = Spi::explain("SELECT count(*) FROM test WHERE id < 2;").unwrap();
         assert!(
             format!("{:?}", explain).contains("Index Name"),
             "expected query plan to use index: {:?}",
             explain.0.to_string()
         );
 
-        // Ensure querying using the index returns the correct results
-        Spi::run("INSERT INTO test(id) VALUES (1), (1), (2)").unwrap();
-        let result: Option<i64> = Spi::get_one("SELECT count(*) FROM test WHERE id = 1").unwrap();
-        assert_eq!(Some(2), result);
+        // Ensure querying using the index does not count the NULL value
+        Spi::run("INSERT INTO test(id) VALUES (NULL), (1), (2), (3), (3)").unwrap();
+        let result: Option<i64> = Spi::get_one("SELECT count(*) FROM test WHERE id < 2").unwrap();
+        assert_eq!(Some(1), result);
     }
 
     #[pg_test]
@@ -185,106 +320,6 @@ mod tests {
             "expected query plan to not use index: {:?}",
             explain.0.to_string()
         );
-    }
-
-    #[pg_test]
-    fn select_lt_with_index() {
-        Spi::run("CREATE TABLE test (id INTEGER) USING pgfdb").unwrap();
-        Spi::run("CREATE INDEX id_idx ON test USING pgfdb_idx(id)").unwrap();
-
-        // Ensure the select will use our index
-        Spi::run("SET enable_seqscan=0").unwrap();
-        let explain = Spi::explain("SELECT count(*) FROM test WHERE id < 2;").unwrap();
-        assert!(
-            format!("{:?}", explain).contains("Index Name"),
-            "expected query plan to use index: {:?}",
-            explain.0.to_string()
-        );
-
-        // Ensure querying using the index returns the correct results
-        Spi::run("INSERT INTO test(id) VALUES (1), (1), (2), (2), (3), (3)").unwrap();
-        let result: Option<i64> = Spi::get_one("SELECT count(*) FROM test WHERE id < 2").unwrap();
-        assert_eq!(Some(2), result);
-    }
-
-    #[pg_test]
-    fn select_lte_with_index() {
-        Spi::run("CREATE TABLE test (id INTEGER) USING pgfdb").unwrap();
-        Spi::run("CREATE INDEX id_idx ON test USING pgfdb_idx(id)").unwrap();
-
-        // Ensure the select will use our index
-        Spi::run("SET enable_seqscan=0").unwrap();
-        let explain = Spi::explain("SELECT count(*) FROM test WHERE id <= 2;").unwrap();
-        assert!(
-            format!("{:?}", explain).contains("Index Name"),
-            "expected query plan to use index: {:?}",
-            explain.0.to_string()
-        );
-
-        // Ensure querying using the index returns the correct results
-        Spi::run("INSERT INTO test(id) VALUES (1), (1), (2), (2), (3), (3)").unwrap();
-        let result: Option<i64> = Spi::get_one("SELECT count(*) FROM test WHERE id <= 2").unwrap();
-        assert_eq!(Some(4), result);
-    }
-
-    #[pg_test]
-    fn select_gt_with_index() {
-        Spi::run("CREATE TABLE test (id INTEGER) USING pgfdb").unwrap();
-        Spi::run("CREATE INDEX id_idx ON test USING pgfdb_idx(id)").unwrap();
-
-        // Ensure the select will use our index
-        Spi::run("SET enable_seqscan=0").unwrap();
-        let explain = Spi::explain("SELECT count(*) FROM test WHERE id > 1;").unwrap();
-        assert!(
-            format!("{:?}", explain).contains("Index Name"),
-            "expected query plan to use index: {:?}",
-            explain.0.to_string()
-        );
-
-        // Ensure querying using the index returns the correct results
-        Spi::run("INSERT INTO test(id) VALUES (1), (1), (2), (2), (3), (3)").unwrap();
-        let result: Option<i64> = Spi::get_one("SELECT count(*) FROM test WHERE id > 2").unwrap();
-        assert_eq!(Some(2), result);
-    }
-
-    #[pg_test]
-    fn select_gte_with_index() {
-        Spi::run("CREATE TABLE test (id INTEGER) USING pgfdb").unwrap();
-        Spi::run("CREATE INDEX id_idx ON test USING pgfdb_idx(id)").unwrap();
-
-        // Ensure the select will use our index
-        Spi::run("SET enable_seqscan=0").unwrap();
-        let explain = Spi::explain("SELECT count(*) FROM test WHERE id >= 2;").unwrap();
-        assert!(
-            format!("{:?}", explain).contains("Index Name"),
-            "expected query plan to use index: {:?}",
-            explain.0.to_string()
-        );
-
-        // Ensure querying using the index returns the correct results
-        Spi::run("INSERT INTO test(id) VALUES (1), (1), (2), (2), (3), (3)").unwrap();
-        let result: Option<i64> = Spi::get_one("SELECT count(*) FROM test WHERE id >= 2").unwrap();
-        assert_eq!(Some(4), result);
-    }
-
-    #[pg_test]
-    fn select_lt_on_nulls_with_index() {
-        Spi::run("CREATE TABLE test (id INTEGER) USING pgfdb").unwrap();
-        Spi::run("CREATE INDEX id_idx ON test USING pgfdb_idx(id)").unwrap();
-
-        // Ensure the select will use our index
-        Spi::run("SET enable_seqscan=0").unwrap();
-        let explain = Spi::explain("SELECT count(*) FROM test WHERE id < 2;").unwrap();
-        assert!(
-            format!("{:?}", explain).contains("Index Name"),
-            "expected query plan to use index: {:?}",
-            explain.0.to_string()
-        );
-
-        // Ensure querying using the index does not count the NULL value
-        Spi::run("INSERT INTO test(id) VALUES (NULL), (1), (2), (3), (3)").unwrap();
-        let result: Option<i64> = Spi::get_one("SELECT count(*) FROM test WHERE id < 2").unwrap();
-        assert_eq!(Some(1), result);
     }
 }
 
