@@ -16,6 +16,12 @@ pub fn encode_datum_for_index<'a>(
             let value = unsafe { pg_sys::DatumGetInt64(datum) };
             Some(Element::Int(value))
         }
+        // BIGINT (OID 20)
+        pg_sys::INT8OID => {
+            // Convert the datum to a Rust i64
+            let value = unsafe { pg_sys::DatumGetInt64(datum) };
+            Some(Element::Int(value))
+        }
         // TEXT (OID 25) or VARCHAR (OID 1043)
         pg_sys::VARCHAROID | pg_sys::TEXTOID => {
             // Use pgrx's text_to_rust_str_unchecked to convert to a Rust string
