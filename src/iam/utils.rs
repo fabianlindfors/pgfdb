@@ -35,6 +35,12 @@ pub fn encode_datum_for_index<'a>(
             let text = unsafe { pgrx::text_to_rust_str_unchecked(varlena.into_pg()).to_string() };
             Some(Element::String(Cow::Owned(text)))
         }
+        // REAL/FLOAT4 (OID 700)
+        pg_sys::FLOAT4OID => {
+            // Convert the datum to a Rust f32, then to f64 for storage in FDB
+            let value = unsafe { pg_sys::DatumGetFloat4(datum) as f64 };
+            Some(Element::Double(value))
+        },
         // Add more types as needed
         _ => {
             // Log unsupported types

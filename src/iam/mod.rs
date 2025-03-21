@@ -48,6 +48,14 @@ use std::ptr;
     CREATE OPERATOR CLASS pgfdb_idx_text
     DEFAULT FOR TYPE TEXT USING pgfdb_idx AS
     OPERATOR 3 = (TEXT, TEXT);
+    
+    CREATE OPERATOR CLASS pgfdb_idx_real
+    DEFAULT FOR TYPE REAL USING pgfdb_idx AS
+    OPERATOR 1 < (REAL, REAL),
+    OPERATOR 2 <= (REAL, REAL),
+    OPERATOR 3 = (REAL, REAL),
+    OPERATOR 4 >= (REAL, REAL),
+    OPERATOR 5 > (REAL, REAL);
     ")]
 pub fn pgfdb_iam_handler() -> IndexAmHandler {
     IndexAmHandler
