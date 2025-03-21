@@ -47,9 +47,6 @@ pub unsafe extern "C" fn aminsert(
     let index_oid = unsafe { (*index_relation).rd_id };
     let index_subspace = crate::subspace::index(index_oid);
 
-    // Get the current transaction
-    let txn = crate::transaction::get_transaction();
-
     // Prepare tuple elements for the index key
     let mut key_elements = Vec::with_capacity(natts);
 
@@ -87,6 +84,7 @@ pub unsafe extern "C" fn aminsert(
     let key = index_subspace.pack(&key_elements);
 
     // Set an empty value since the ID is now part of the key
+    let txn = crate::transaction::get_transaction();
     txn.set(&key, &[]);
 
     true

@@ -5,6 +5,8 @@ use pg_sys::XactEvent;
 use pgrx::prelude::*;
 use pollster::FutureExt;
 
+// Not sure how well this will work with multiple connections at the same time
+// Perhaps thread_local! can be used instead, although lifetimes are more painful using that
 static mut TRANSACTION: OnceLock<Transaction> = OnceLock::new();
 
 #[pg_guard]
@@ -18,6 +20,8 @@ pub unsafe extern "C" fn transaction_callback(event: u32, _arg: *mut ::std::os::
 }
 
 pub fn get_transaction() -> &'static Transaction {
+    // Static mut reference is highly discouraged but haven't found a better way yet
+    #[allow(static_mut_refs)]
     unsafe {
         TRANSACTION.get_or_init(|| {
             let db = foundationdb::Database::default().unwrap();
