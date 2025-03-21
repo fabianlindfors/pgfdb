@@ -1,5 +1,3 @@
-#![feature(noop_waker)]
-
 use std::env;
 
 use pgrx::pg_sys::RegisterXactCallback;
