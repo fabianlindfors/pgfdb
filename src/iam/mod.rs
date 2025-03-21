@@ -27,7 +27,8 @@ use std::ptr;
     OPERATOR 2 <= (INTEGER, INTEGER),
     OPERATOR 3 = (INTEGER, INTEGER),
     OPERATOR 4 >= (INTEGER, INTEGER),
-    OPERATOR 5 > (INTEGER, INTEGER);
+    OPERATOR 5 > (INTEGER, INTEGER),
+    OPERATOR 6 != (INTEGER, INTEGER);
     
     CREATE OPERATOR CLASS pgfdb_idx_bigint
     DEFAULT FOR TYPE BIGINT USING pgfdb_idx AS
@@ -35,7 +36,8 @@ use std::ptr;
     OPERATOR 2 <= (BIGINT, BIGINT),
     OPERATOR 3 = (BIGINT, BIGINT),
     OPERATOR 4 >= (BIGINT, BIGINT),
-    OPERATOR 5 > (BIGINT, BIGINT);
+    OPERATOR 5 > (BIGINT, BIGINT),
+    OPERATOR 6 != (BIGINT, BIGINT);
     
     CREATE OPERATOR CLASS pgfdb_idx_smallint
     DEFAULT FOR TYPE SMALLINT USING pgfdb_idx AS
@@ -43,11 +45,13 @@ use std::ptr;
     OPERATOR 2 <= (SMALLINT, SMALLINT),
     OPERATOR 3 = (SMALLINT, SMALLINT),
     OPERATOR 4 >= (SMALLINT, SMALLINT),
-    OPERATOR 5 > (SMALLINT, SMALLINT);
+    OPERATOR 5 > (SMALLINT, SMALLINT),
+    OPERATOR 6 != (SMALLINT, SMALLINT);
     
     CREATE OPERATOR CLASS pgfdb_idx_text
     DEFAULT FOR TYPE TEXT USING pgfdb_idx AS
-    OPERATOR 3 = (TEXT, TEXT);
+    OPERATOR 3 = (TEXT, TEXT),
+    OPERATOR 6 != (TEXT, TEXT);
     
     CREATE OPERATOR CLASS pgfdb_idx_real
     DEFAULT FOR TYPE REAL USING pgfdb_idx AS
@@ -55,7 +59,8 @@ use std::ptr;
     OPERATOR 2 <= (REAL, REAL),
     OPERATOR 3 = (REAL, REAL),
     OPERATOR 4 >= (REAL, REAL),
-    OPERATOR 5 > (REAL, REAL);
+    OPERATOR 5 > (REAL, REAL),
+    OPERATOR 6 != (REAL, REAL);
     
     CREATE OPERATOR CLASS pgfdb_idx_double_precision
     DEFAULT FOR TYPE DOUBLE PRECISION USING pgfdb_idx AS
@@ -63,7 +68,8 @@ use std::ptr;
     OPERATOR 2 <= (DOUBLE PRECISION, DOUBLE PRECISION),
     OPERATOR 3 = (DOUBLE PRECISION, DOUBLE PRECISION),
     OPERATOR 4 >= (DOUBLE PRECISION, DOUBLE PRECISION),
-    OPERATOR 5 > (DOUBLE PRECISION, DOUBLE PRECISION);
+    OPERATOR 5 > (DOUBLE PRECISION, DOUBLE PRECISION),
+    OPERATOR 6 != (DOUBLE PRECISION, DOUBLE PRECISION);
     ")]
 pub fn pgfdb_iam_handler() -> IndexAmHandler {
     IndexAmHandler
@@ -121,7 +127,7 @@ unsafe impl BoxRet for IndexAmHandler {
         // 3: =
         // 4: <=
         // 5: <
-        index_am_routine.amstrategies = 5;
+        index_am_routine.amstrategies = 6;
 
         index_am_routine.amsupport = 0;
         index_am_routine.amoptsprocnum = 0;

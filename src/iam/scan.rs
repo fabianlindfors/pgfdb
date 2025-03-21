@@ -260,6 +260,25 @@ fn range_options_for_scan<'a>(
         // Strategy 0: IS NULL check
         // Strategy 3: Equality (=)
         0 | 3 => vec![RangeOption::from(base_subspace.subspace(&element).range())],
+        // Strategy 6: Not equals (!=)
+        6 => {
+            // For not equals, we take the inverse of equals above and hence need two ranges:
+            // 1. Everything from the start of the subspace up to (but not including) the start of the equals subspace
+            // 2. Everything after the equals subspace to the end of the subspace
+            let equals_subspace = base_subspace.subspace(&element);
+
+            let before_range = RangeOption::from((
+                KeySelector::first_greater_or_equal(base_subspace.range().0),
+                KeySelector::first_greater_or_equal(equals_subspace.range().0),
+            ));
+
+            let after_range = RangeOption::from((
+                KeySelector::first_greater_than(equals_subspace.range().1),
+                KeySelector::first_greater_than(base_subspace.range().1),
+            ));
+
+            vec![before_range, after_range]
+        }
         // Strategy 4: Greater than or equal (>=)
         4 => {
             // For greater than or equal, we start from the element itself

@@ -108,7 +108,7 @@ mod tests {
             ("FLOAT", FLOAT_TEST_VALUES),
         ];
 
-        for (column_type, (value1, value2, _)) in cases {
+        for (column_type, (value1, value2, value3)) in cases {
             let table = format!("test_{}", column_type.to_lowercase());
 
             Spi::run(&format!(
@@ -123,7 +123,7 @@ mod tests {
             // Ensure the select will use our index
             Spi::run("SET enable_seqscan=0").unwrap();
             let explain = Spi::explain(&format!(
-                "SELECT count(*) FROM {table} WHERE id = CAST({value1} AS {column_type})"
+                "SELECT count(*) FROM {table} WHERE id = CAST({value2} AS {column_type})"
             ))
             .unwrap();
             assert!(
@@ -134,14 +134,61 @@ mod tests {
 
             // Ensure querying using the index returns the correct results
             Spi::run(&format!(
-                "INSERT INTO {table}(id) VALUES ({value1}), ({value1}), ({value2})"
+                "INSERT INTO {table}(id) VALUES ({value1}), ({value1}), ({value2}), ({value2}), ({value3}), ({value3})"
             ))
             .unwrap();
             let result: Option<i64> = Spi::get_one(&format!(
-                "SELECT count(*) FROM {table} WHERE id = CAST({value1} as {column_type})"
+                "SELECT count(*) FROM {table} WHERE id = CAST({value2} as {column_type})"
             ))
             .unwrap();
             assert_eq!(Some(2), result);
+        }
+    }
+
+    #[pg_test]
+    fn select_not_eq_with_index() {
+        let cases = vec![
+            ("INTEGER", INTEGER_TEST_VALUES),
+            ("BIGINT", INTEGER_TEST_VALUES),
+            ("SMALLINT", INTEGER_TEST_VALUES),
+            ("REAL", FLOAT_TEST_VALUES),
+            ("FLOAT", FLOAT_TEST_VALUES),
+        ];
+
+        for (column_type, (value1, value2, value3)) in cases {
+            let table = format!("test_{}", column_type.to_lowercase());
+
+            Spi::run(&format!(
+                "CREATE TABLE {table} (id {column_type}) USING pgfdb"
+            ))
+            .unwrap();
+            Spi::run(&format!(
+                "CREATE INDEX {table}_id_idx ON {table} USING pgfdb_idx(id)"
+            ))
+            .unwrap();
+
+            // Ensure the select will use our index
+            Spi::run("SET enable_seqscan=0").unwrap();
+            let explain = Spi::explain(&format!(
+                "SELECT count(*) FROM {table} WHERE id != CAST({value2} AS {column_type})"
+            ))
+            .unwrap();
+            assert!(
+                format!("{:?}", explain).contains("Index Name"),
+                "expected query plan to use index: {:?}",
+                explain.0.to_string()
+            );
+
+            // Ensure querying using the index returns the correct results
+            Spi::run(&format!(
+                "INSERT INTO {table}(id) VALUES ({value1}), ({value1}), ({value2}), ({value2}), ({value3}), ({value3})"
+            ))
+            .unwrap();
+            let result: Option<i64> = Spi::get_one(&format!(
+                "SELECT count(*) FROM {table} WHERE id != CAST({value2} as {column_type})"
+            ))
+            .unwrap();
+            assert_eq!(Some(4), result);
         }
     }
 
