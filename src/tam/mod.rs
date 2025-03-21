@@ -242,7 +242,7 @@ unsafe extern "C" fn index_fetch_tuple(
     let id = item_pointer_get_block_number_no_check(*tid);
     // Store the current ID in our custom field for potential future use
     (*fdb_scan).current_id = id;
-    
+
     let key = subspace::table((*(*scan).rel).rd_id).pack(&id);
 
     let txn = crate::transaction::get_transaction();
@@ -272,8 +272,8 @@ unsafe extern "C" fn tuple_insert(
     // Generate random ID which we will use as a Postgres item pointer
     // An item pointers stores an unsigned 48 integer (32-bit block number and 16-bit offset)
     // We randomly generate a block number and always set the offset to 1
-    let mut rng = rand::thread_rng();
-    let id = rng.gen_range(0..=u32::MAX);
+    let mut rng = rand::rng();
+    let id = rng.random_range(0..=u32::MAX);
 
     // Store the random ID as an item pointer to the slot
     // Offset can't be 0 so we set that to 1
