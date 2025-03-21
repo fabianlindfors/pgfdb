@@ -29,6 +29,11 @@ jobs:
           sudo service foundationdb start
           fdbcli --exec "configure single memory"
 
+      - name: Install pgrx system dependencies
+        run: |
+          sudo apt-get install build-essential libreadline-dev zlib1g-dev flex bison libxml2-dev libxslt-dev libssl-dev libxml2-utils xsltproc ccache pkg-config
+          sudo apt install clang
+
       - name: Install and initialize cargo-pgrx
         run: |
           cargo install cargo-pgrx
