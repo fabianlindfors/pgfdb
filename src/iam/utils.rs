@@ -41,6 +41,12 @@ pub fn encode_datum_for_index<'a>(
             let value = unsafe { pg_sys::DatumGetFloat4(datum) as f64 };
             Some(Element::Double(value))
         },
+        // DOUBLE PRECISION/FLOAT8 (OID 701)
+        pg_sys::FLOAT8OID => {
+            // Convert the datum to a Rust f64 for storage in FDB
+            let value = unsafe { pg_sys::DatumGetFloat8(datum) };
+            Some(Element::Double(value))
+        },
         // Add more types as needed
         _ => {
             // Log unsupported types

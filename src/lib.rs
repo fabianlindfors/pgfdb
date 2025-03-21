@@ -105,6 +105,7 @@ mod tests {
             ("BIGINT", INTEGER_TEST_VALUES),
             ("SMALLINT", INTEGER_TEST_VALUES),
             ("REAL", FLOAT_TEST_VALUES),
+            ("FLOAT", FLOAT_TEST_VALUES),
         ];
 
         for (column_type, (value1, value2, _)) in cases {
@@ -151,6 +152,7 @@ mod tests {
             ("BIGINT", INTEGER_TEST_VALUES),
             ("SMALLINT", INTEGER_TEST_VALUES),
             ("REAL", FLOAT_TEST_VALUES),
+            ("FLOAT", FLOAT_TEST_VALUES),
         ];
 
         for (column_type, (value1, value2, value3)) in cases {
@@ -197,6 +199,7 @@ mod tests {
             ("BIGINT", INTEGER_TEST_VALUES),
             ("SMALLINT", INTEGER_TEST_VALUES),
             ("REAL", FLOAT_TEST_VALUES),
+            ("FLOAT", FLOAT_TEST_VALUES),
         ];
 
         for (column_type, (value1, value2, value3)) in cases {
@@ -243,6 +246,7 @@ mod tests {
             ("BIGINT", INTEGER_TEST_VALUES),
             ("SMALLINT", INTEGER_TEST_VALUES),
             ("REAL", FLOAT_TEST_VALUES),
+            ("FLOAT", FLOAT_TEST_VALUES),
         ];
 
         for (column_type, (value1, value2, value3)) in cases {
@@ -289,6 +293,7 @@ mod tests {
             ("BIGINT", INTEGER_TEST_VALUES),
             ("SMALLINT", INTEGER_TEST_VALUES),
             ("REAL", FLOAT_TEST_VALUES),
+            ("FLOAT", FLOAT_TEST_VALUES),
         ];
 
         for (column_type, (value1, value2, value3)) in cases {
