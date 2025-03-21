@@ -33,6 +33,7 @@ pub fn get_transaction() -> &'static Transaction {
 }
 
 fn commit_transaction() {
+    #[allow(static_mut_refs)]
     if let Some(txn) = unsafe { TRANSACTION.take() } {
         let result = txn.commit().block_on().unwrap();
         log!(
@@ -43,6 +44,9 @@ fn commit_transaction() {
 }
 
 fn abort_transaction() {
-    unsafe { TRANSACTION.take() };
+    #[allow(static_mut_refs)]
+    unsafe {
+        TRANSACTION.take()
+    };
     log!("TXN: Transaction aborted");
 }
