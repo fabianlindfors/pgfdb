@@ -4,6 +4,7 @@ use std::task::{Context, Poll, Waker};
 use foundationdb::tuple::{Element, Subspace};
 use foundationdb::KeySelector;
 use foundationdb::{future::FdbValue, tuple::unpack, FdbResult, RangeOption};
+use futures::stream::empty;
 use futures::{stream::BoxStream, FutureExt, StreamExt};
 use pg_sys::{
     clauselist_selectivity, get_quals_from_indexclauses, Cost, IndexPath, IndexScanDesc,
@@ -171,11 +172,17 @@ pub unsafe extern "C" fn amrescan(
     // Construct a range option representing what part of the index we need to iterate over based on the scan keys
     let index_oid = (*index_relation).rd_id;
     let index_subspace = crate::subspace::index(index_oid);
-    let range_option = range_option_for_scan(index_subspace, scan_keys, attrs);
+    let range_options = range_options_for_scan(index_subspace, scan_keys, attrs);
 
-    // Create a stream of key-value pairs from FDB
+    // Create a stream of key-value pairs from FDB from all the range options chained together
     let txn = crate::transaction::get_transaction();
-    let stream = txn.get_ranges_keyvalues(range_option, false).boxed();
+    let stream = range_options
+        .into_iter()
+        .fold(empty().boxed(), |stream, range_option| {
+            stream
+                .chain(txn.get_ranges_keyvalues(range_option, false))
+                .boxed()
+        });
 
     // Replace the existing stream
     // First, drop the old stream to avoid leaking resources
@@ -184,14 +191,14 @@ pub unsafe extern "C" fn amrescan(
     drop(old_stream);
 }
 
-fn range_option_for_scan<'a>(
+fn range_options_for_scan<'a>(
     index_subspace: Subspace,
     scan_keys: &'a [ScanKeyData],
     attrs: &'a [FormData_pg_attribute],
-) -> RangeOption<'a> {
+) -> Vec<RangeOption<'a>> {
     // This should never happen but if there are no scan keys, we scan the entire index
     let [head @ .., last] = scan_keys else {
-        return RangeOption::from(index_subspace.range());
+        return vec![RangeOption::from(index_subspace.range())];
     };
 
     let mut head_tuple_elements: Vec<Element> = Vec::with_capacity(head.len());
@@ -240,7 +247,7 @@ fn range_option_for_scan<'a>(
         1 => {
             let start_key = KeySelector::first_greater_or_equal(base_subspace.range().0);
             let end_key = KeySelector::last_less_than(base_subspace.subspace(&element).range().1);
-            RangeOption::from((start_key, end_key))
+            vec![RangeOption::from((start_key, end_key))]
         }
         // Strategy 2: Less than or equal (<=)
         2 => {
@@ -248,18 +255,18 @@ fn range_option_for_scan<'a>(
             // End is exclusive in ranges so we need to use this key selector to include the element value
             let end_key =
                 KeySelector::first_greater_than(base_subspace.subspace(&element).range().1);
-            RangeOption::from((start_key, end_key))
+            vec![RangeOption::from((start_key, end_key))]
         }
         // Strategy 0: IS NULL check
         // Strategy 3: Equality (=)
-        0 | 3 => RangeOption::from(base_subspace.subspace(&element).range()),
+        0 | 3 => vec![RangeOption::from(base_subspace.subspace(&element).range())],
         // Strategy 4: Greater than or equal (>=)
         4 => {
             // For greater than or equal, we start from the element itself
             let start_key =
                 KeySelector::first_greater_or_equal(base_subspace.subspace(&element).range().0);
             let end_key = KeySelector::first_greater_than(base_subspace.range().1);
-            RangeOption::from((start_key, end_key))
+            vec![RangeOption::from((start_key, end_key))]
         }
         // Strategy 5: Greater than (>)
         5 => {
@@ -267,7 +274,7 @@ fn range_option_for_scan<'a>(
             let start_key =
                 KeySelector::first_greater_than(base_subspace.subspace(&element).range().1);
             let end_key = KeySelector::first_greater_than(base_subspace.range().1);
-            RangeOption::from((start_key, end_key))
+            vec![RangeOption::from((start_key, end_key))]
         }
         _ => panic!("Unsupported strategy for scan key {}", last.sk_strategy),
     }
