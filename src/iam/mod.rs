@@ -20,9 +20,15 @@ use std::ptr;
     -- Create the corresponding index access method from the just-registered IAM handler
     CREATE ACCESS METHOD pgfdb_idx TYPE INDEX HANDLER pgfdb_iam_handler;
 
-    -- Operator classes
+    -- Create operator families for related data types
+    CREATE OPERATOR FAMILY pgfdb_numeric_ops USING pgfdb_idx;
+    CREATE OPERATOR FAMILY pgfdb_text_ops USING pgfdb_idx;
+    CREATE OPERATOR FAMILY pgfdb_float_ops USING pgfdb_idx;
+
+    -- Operator classes for numeric types
     CREATE OPERATOR CLASS pgfdb_idx_integer 
-    DEFAULT FOR TYPE INTEGER USING pgfdb_idx AS
+    DEFAULT FOR TYPE INTEGER USING pgfdb_idx 
+    FAMILY pgfdb_numeric_ops AS
     OPERATOR 1 < (INTEGER, INTEGER),
     OPERATOR 2 <= (INTEGER, INTEGER),
     OPERATOR 3 = (INTEGER, INTEGER),
@@ -31,7 +37,8 @@ use std::ptr;
     OPERATOR 6 != (INTEGER, INTEGER);
     
     CREATE OPERATOR CLASS pgfdb_idx_bigint
-    DEFAULT FOR TYPE BIGINT USING pgfdb_idx AS
+    DEFAULT FOR TYPE BIGINT USING pgfdb_idx 
+    FAMILY pgfdb_numeric_ops AS
     OPERATOR 1 < (BIGINT, BIGINT),
     OPERATOR 2 <= (BIGINT, BIGINT),
     OPERATOR 3 = (BIGINT, BIGINT),
@@ -40,7 +47,8 @@ use std::ptr;
     OPERATOR 6 != (BIGINT, BIGINT);
     
     CREATE OPERATOR CLASS pgfdb_idx_smallint
-    DEFAULT FOR TYPE SMALLINT USING pgfdb_idx AS
+    DEFAULT FOR TYPE SMALLINT USING pgfdb_idx 
+    FAMILY pgfdb_numeric_ops AS
     OPERATOR 1 < (SMALLINT, SMALLINT),
     OPERATOR 2 <= (SMALLINT, SMALLINT),
     OPERATOR 3 = (SMALLINT, SMALLINT),
@@ -48,13 +56,17 @@ use std::ptr;
     OPERATOR 5 > (SMALLINT, SMALLINT),
     OPERATOR 6 != (SMALLINT, SMALLINT);
     
+    -- Operator class for text type
     CREATE OPERATOR CLASS pgfdb_idx_text
-    DEFAULT FOR TYPE TEXT USING pgfdb_idx AS
+    DEFAULT FOR TYPE TEXT USING pgfdb_idx 
+    FAMILY pgfdb_text_ops AS
     OPERATOR 3 = (TEXT, TEXT),
     OPERATOR 6 != (TEXT, TEXT);
     
+    -- Operator classes for floating point types
     CREATE OPERATOR CLASS pgfdb_idx_real
-    DEFAULT FOR TYPE REAL USING pgfdb_idx AS
+    DEFAULT FOR TYPE REAL USING pgfdb_idx 
+    FAMILY pgfdb_float_ops AS
     OPERATOR 1 < (REAL, REAL),
     OPERATOR 2 <= (REAL, REAL),
     OPERATOR 3 = (REAL, REAL),
@@ -63,13 +75,116 @@ use std::ptr;
     OPERATOR 6 != (REAL, REAL);
     
     CREATE OPERATOR CLASS pgfdb_idx_double_precision
-    DEFAULT FOR TYPE DOUBLE PRECISION USING pgfdb_idx AS
+    DEFAULT FOR TYPE DOUBLE PRECISION USING pgfdb_idx 
+    FAMILY pgfdb_float_ops AS
     OPERATOR 1 < (DOUBLE PRECISION, DOUBLE PRECISION),
     OPERATOR 2 <= (DOUBLE PRECISION, DOUBLE PRECISION),
     OPERATOR 3 = (DOUBLE PRECISION, DOUBLE PRECISION),
     OPERATOR 4 >= (DOUBLE PRECISION, DOUBLE PRECISION),
     OPERATOR 5 > (DOUBLE PRECISION, DOUBLE PRECISION),
     OPERATOR 6 != (DOUBLE PRECISION, DOUBLE PRECISION);
+    
+    -- Add cross-type operators to numeric family
+    ALTER OPERATOR FAMILY pgfdb_numeric_ops USING pgfdb_idx ADD
+        -- INTEGER to BIGINT comparisons
+        OPERATOR 1 < (INTEGER, BIGINT),
+        OPERATOR 2 <= (INTEGER, BIGINT),
+        OPERATOR 3 = (INTEGER, BIGINT),
+        OPERATOR 4 >= (INTEGER, BIGINT),
+        OPERATOR 5 > (INTEGER, BIGINT),
+        OPERATOR 6 != (INTEGER, BIGINT),
+        
+        -- BIGINT to INTEGER comparisons
+        OPERATOR 1 < (BIGINT, INTEGER),
+        OPERATOR 2 <= (BIGINT, INTEGER),
+        OPERATOR 3 = (BIGINT, INTEGER),
+        OPERATOR 4 >= (BIGINT, INTEGER),
+        OPERATOR 5 > (BIGINT, INTEGER),
+        OPERATOR 6 != (BIGINT, INTEGER),
+        
+        -- INTEGER to SMALLINT comparisons
+        OPERATOR 1 < (INTEGER, SMALLINT),
+        OPERATOR 2 <= (INTEGER, SMALLINT),
+        OPERATOR 3 = (INTEGER, SMALLINT),
+        OPERATOR 4 >= (INTEGER, SMALLINT),
+        OPERATOR 5 > (INTEGER, SMALLINT),
+        OPERATOR 6 != (INTEGER, SMALLINT),
+        
+        -- SMALLINT to INTEGER comparisons
+        OPERATOR 1 < (SMALLINT, INTEGER),
+        OPERATOR 2 <= (SMALLINT, INTEGER),
+        OPERATOR 3 = (SMALLINT, INTEGER),
+        OPERATOR 4 >= (SMALLINT, INTEGER),
+        OPERATOR 5 > (SMALLINT, INTEGER),
+        OPERATOR 6 != (SMALLINT, INTEGER),
+        
+        -- BIGINT to SMALLINT comparisons
+        OPERATOR 1 < (BIGINT, SMALLINT),
+        OPERATOR 2 <= (BIGINT, SMALLINT),
+        OPERATOR 3 = (BIGINT, SMALLINT),
+        OPERATOR 4 >= (BIGINT, SMALLINT),
+        OPERATOR 5 > (BIGINT, SMALLINT),
+        OPERATOR 6 != (BIGINT, SMALLINT),
+        
+        -- SMALLINT to BIGINT comparisons
+        OPERATOR 1 < (SMALLINT, BIGINT),
+        OPERATOR 2 <= (SMALLINT, BIGINT),
+        OPERATOR 3 = (SMALLINT, BIGINT),
+        OPERATOR 4 >= (SMALLINT, BIGINT),
+        OPERATOR 5 > (SMALLINT, BIGINT),
+        OPERATOR 6 != (SMALLINT, BIGINT);
+    
+    -- Add cross-type operators to float family
+    ALTER OPERATOR FAMILY pgfdb_float_ops USING pgfdb_idx ADD
+        -- REAL to DOUBLE PRECISION comparisons
+        OPERATOR 1 < (REAL, DOUBLE PRECISION),
+        OPERATOR 2 <= (REAL, DOUBLE PRECISION),
+        OPERATOR 3 = (REAL, DOUBLE PRECISION),
+        OPERATOR 4 >= (REAL, DOUBLE PRECISION),
+        OPERATOR 5 > (REAL, DOUBLE PRECISION),
+        OPERATOR 6 != (REAL, DOUBLE PRECISION),
+        
+        -- DOUBLE PRECISION to REAL comparisons
+        OPERATOR 1 < (DOUBLE PRECISION, REAL),
+        OPERATOR 2 <= (DOUBLE PRECISION, REAL),
+        OPERATOR 3 = (DOUBLE PRECISION, REAL),
+        OPERATOR 4 >= (DOUBLE PRECISION, REAL),
+        OPERATOR 5 > (DOUBLE PRECISION, REAL),
+        OPERATOR 6 != (DOUBLE PRECISION, REAL);
+        
+    -- Add cross-type operators between numeric and float families
+    -- This allows comparisons between integers and floating point numbers
+    ALTER OPERATOR FAMILY pgfdb_numeric_ops USING pgfdb_idx ADD
+        -- INTEGER to REAL/DOUBLE PRECISION
+        OPERATOR 1 < (INTEGER, REAL),
+        OPERATOR 2 <= (INTEGER, REAL),
+        OPERATOR 3 = (INTEGER, REAL),
+        OPERATOR 4 >= (INTEGER, REAL),
+        OPERATOR 5 > (INTEGER, REAL),
+        OPERATOR 6 != (INTEGER, REAL),
+        
+        OPERATOR 1 < (INTEGER, DOUBLE PRECISION),
+        OPERATOR 2 <= (INTEGER, DOUBLE PRECISION),
+        OPERATOR 3 = (INTEGER, DOUBLE PRECISION),
+        OPERATOR 4 >= (INTEGER, DOUBLE PRECISION),
+        OPERATOR 5 > (INTEGER, DOUBLE PRECISION),
+        OPERATOR 6 != (INTEGER, DOUBLE PRECISION);
+        
+    ALTER OPERATOR FAMILY pgfdb_float_ops USING pgfdb_idx ADD
+        -- REAL/DOUBLE PRECISION to INTEGER
+        OPERATOR 1 < (REAL, INTEGER),
+        OPERATOR 2 <= (REAL, INTEGER),
+        OPERATOR 3 = (REAL, INTEGER),
+        OPERATOR 4 >= (REAL, INTEGER),
+        OPERATOR 5 > (REAL, INTEGER),
+        OPERATOR 6 != (REAL, INTEGER),
+        
+        OPERATOR 1 < (DOUBLE PRECISION, INTEGER),
+        OPERATOR 2 <= (DOUBLE PRECISION, INTEGER),
+        OPERATOR 3 = (DOUBLE PRECISION, INTEGER),
+        OPERATOR 4 >= (DOUBLE PRECISION, INTEGER),
+        OPERATOR 5 > (DOUBLE PRECISION, INTEGER),
+        OPERATOR 6 != (DOUBLE PRECISION, INTEGER);
     ")]
 pub fn pgfdb_iam_handler() -> IndexAmHandler {
     IndexAmHandler
