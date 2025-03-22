@@ -13,7 +13,9 @@ use pg_sys::{
 };
 use pgrx::itemptr::item_pointer_set_all;
 use pgrx::pg_sys::panic::ErrorReportable;
-use pgrx::pg_sys::{FormData_pg_attribute, ScanKeyData, SK_ISNULL};
+use pgrx::pg_sys::{
+    FormData_pg_attribute, ScanKeyData, SK_ISNULL, SK_SEARCHNOTNULL, SK_SEARCHNULL,
+};
 use pgrx::prelude::*;
 
 use crate::iam::utils::encode_datum_for_index;
@@ -231,8 +233,10 @@ fn range_options_for_scan<'a>(
     // Here we can support more than just equality by building different ranges to scan.
     let attr = attrs[last.sk_attno as usize - 1];
 
-    let element = if last.sk_flags as u32 & SK_ISNULL != 0 {
-        // If this is an IS NULL check, we shouldn't encode and instead just use the tuple nil value
+    let element = if last.sk_flags as u32 & SK_SEARCHNULL != 0
+        || last.sk_flags as u32 & SK_SEARCHNOTNULL != 0
+    {
+        // If this is an IS NULL or IS NOT NULL scan, we shouldn't encode and instead just use the tuple nil value
         Element::Nil
     } else {
         match encode_datum_for_index(last.sk_argument, attr.atttypid) {
@@ -257,11 +261,14 @@ fn range_options_for_scan<'a>(
                 KeySelector::first_greater_than(base_subspace.subspace(&element).range().1);
             vec![RangeOption::from((start_key, end_key))]
         }
-        // Strategy 0: IS NULL check
         // Strategy 3: Equality (=)
-        0 | 3 => vec![RangeOption::from(base_subspace.subspace(&element).range())],
+        // Also covers IS NULL scans
+        i if i == 3 || last.sk_flags as u32 & SK_SEARCHNULL != 0 => {
+            vec![RangeOption::from(base_subspace.subspace(&element).range())]
+        }
         // Strategy 6: Not equals (!=)
-        6 => {
+        // Also covers IS NOT NULL scans
+        i if i == 6 || last.sk_flags as u32 & SK_SEARCHNOTNULL != 0 => {
             // For not equals, we take the inverse of equals above and hence need two ranges:
             // 1. Everything from the start of the subspace up to (but not including) the start of the equals subspace
             // 2. Everything after the equals subspace to the end of the subspace
