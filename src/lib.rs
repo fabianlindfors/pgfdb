@@ -97,6 +97,8 @@ mod tests {
 
     const INTEGER_TEST_VALUES: (&'static str, &'static str, &'static str) = ("1", "2", "3");
     const FLOAT_TEST_VALUES: (&'static str, &'static str, &'static str) = ("1.1", "2.2", "3.3");
+    const STRING_TEST_VALUES: (&'static str, &'static str, &'static str) =
+        ("'test1'", "'test2'", "'test3'");
 
     #[pg_test]
     fn select_eq_with_index() {
@@ -106,6 +108,7 @@ mod tests {
             ("SMALLINT", INTEGER_TEST_VALUES),
             ("REAL", FLOAT_TEST_VALUES),
             ("FLOAT", FLOAT_TEST_VALUES),
+            ("TEXT", STRING_TEST_VALUES),
         ];
 
         for (column_type, (value1, value2, value3)) in cases {
@@ -153,6 +156,7 @@ mod tests {
             ("SMALLINT", INTEGER_TEST_VALUES),
             ("REAL", FLOAT_TEST_VALUES),
             ("FLOAT", FLOAT_TEST_VALUES),
+            ("TEXT", STRING_TEST_VALUES),
         ];
 
         for (column_type, (value1, value2, value3)) in cases {
