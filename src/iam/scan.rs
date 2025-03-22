@@ -13,9 +13,7 @@ use pg_sys::{
 };
 use pgrx::itemptr::item_pointer_set_all;
 use pgrx::pg_sys::panic::ErrorReportable;
-use pgrx::pg_sys::{
-    FormData_pg_attribute, ScanKeyData, SK_ISNULL, SK_SEARCHNOTNULL, SK_SEARCHNULL,
-};
+use pgrx::pg_sys::{FormData_pg_attribute, ScanKeyData, SK_SEARCHNOTNULL, SK_SEARCHNULL};
 use pgrx::prelude::*;
 
 use crate::iam::utils::encode_datum_for_index;
