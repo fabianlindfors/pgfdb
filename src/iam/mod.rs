@@ -152,39 +152,8 @@ use std::ptr;
         OPERATOR 5 > (DOUBLE PRECISION, REAL),
         OPERATOR 6 != (DOUBLE PRECISION, REAL);
         
-    -- Add cross-type operators between numeric and float families
-    -- This allows comparisons between integers and floating point numbers
-    ALTER OPERATOR FAMILY pgfdb_numeric_ops USING pgfdb_idx ADD
-        -- INTEGER to REAL/DOUBLE PRECISION
-        OPERATOR 1 < (INTEGER, REAL),
-        OPERATOR 2 <= (INTEGER, REAL),
-        OPERATOR 3 = (INTEGER, REAL),
-        OPERATOR 4 >= (INTEGER, REAL),
-        OPERATOR 5 > (INTEGER, REAL),
-        OPERATOR 6 != (INTEGER, REAL),
-        
-        OPERATOR 1 < (INTEGER, DOUBLE PRECISION),
-        OPERATOR 2 <= (INTEGER, DOUBLE PRECISION),
-        OPERATOR 3 = (INTEGER, DOUBLE PRECISION),
-        OPERATOR 4 >= (INTEGER, DOUBLE PRECISION),
-        OPERATOR 5 > (INTEGER, DOUBLE PRECISION),
-        OPERATOR 6 != (INTEGER, DOUBLE PRECISION);
-        
-    ALTER OPERATOR FAMILY pgfdb_float_ops USING pgfdb_idx ADD
-        -- REAL/DOUBLE PRECISION to INTEGER
-        OPERATOR 1 < (REAL, INTEGER),
-        OPERATOR 2 <= (REAL, INTEGER),
-        OPERATOR 3 = (REAL, INTEGER),
-        OPERATOR 4 >= (REAL, INTEGER),
-        OPERATOR 5 > (REAL, INTEGER),
-        OPERATOR 6 != (REAL, INTEGER),
-        
-        OPERATOR 1 < (DOUBLE PRECISION, INTEGER),
-        OPERATOR 2 <= (DOUBLE PRECISION, INTEGER),
-        OPERATOR 3 = (DOUBLE PRECISION, INTEGER),
-        OPERATOR 4 >= (DOUBLE PRECISION, INTEGER),
-        OPERATOR 5 > (DOUBLE PRECISION, INTEGER),
-        OPERATOR 6 != (DOUBLE PRECISION, INTEGER);
+    -- Cross-type operators between numeric and float families are removed
+    -- as the operators don't exist in PostgreSQL by default
     ")]
 pub fn pgfdb_iam_handler() -> IndexAmHandler {
     IndexAmHandler
