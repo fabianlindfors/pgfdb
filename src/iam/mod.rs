@@ -21,14 +21,14 @@ use std::ptr;
     CREATE ACCESS METHOD pgfdb_idx TYPE INDEX HANDLER pgfdb_iam_handler;
 
     -- Create operator families for related data types
-    CREATE OPERATOR FAMILY pgfdb_numeric_ops USING pgfdb_idx;
+    CREATE OPERATOR FAMILY pgfdb_integer_ops USING pgfdb_idx;
     CREATE OPERATOR FAMILY pgfdb_text_ops USING pgfdb_idx;
     CREATE OPERATOR FAMILY pgfdb_float_ops USING pgfdb_idx;
 
-    -- Operator classes for numeric types
+    -- Operator classes for integer types
     CREATE OPERATOR CLASS pgfdb_idx_integer 
     DEFAULT FOR TYPE INTEGER USING pgfdb_idx 
-    FAMILY pgfdb_numeric_ops AS
+    FAMILY pgfdb_integer_ops AS
     OPERATOR 1 < (INTEGER, INTEGER),
     OPERATOR 2 <= (INTEGER, INTEGER),
     OPERATOR 3 = (INTEGER, INTEGER),
@@ -38,7 +38,7 @@ use std::ptr;
     
     CREATE OPERATOR CLASS pgfdb_idx_bigint
     DEFAULT FOR TYPE BIGINT USING pgfdb_idx 
-    FAMILY pgfdb_numeric_ops AS
+    FAMILY pgfdb_integer_ops AS
     OPERATOR 1 < (BIGINT, BIGINT),
     OPERATOR 2 <= (BIGINT, BIGINT),
     OPERATOR 3 = (BIGINT, BIGINT),
@@ -48,7 +48,7 @@ use std::ptr;
     
     CREATE OPERATOR CLASS pgfdb_idx_smallint
     DEFAULT FOR TYPE SMALLINT USING pgfdb_idx 
-    FAMILY pgfdb_numeric_ops AS
+    FAMILY pgfdb_integer_ops AS
     OPERATOR 1 < (SMALLINT, SMALLINT),
     OPERATOR 2 <= (SMALLINT, SMALLINT),
     OPERATOR 3 = (SMALLINT, SMALLINT),
@@ -84,8 +84,8 @@ use std::ptr;
     OPERATOR 5 > (DOUBLE PRECISION, DOUBLE PRECISION),
     OPERATOR 6 != (DOUBLE PRECISION, DOUBLE PRECISION);
     
-    -- Add cross-type operators to numeric family
-    ALTER OPERATOR FAMILY pgfdb_numeric_ops USING pgfdb_idx ADD
+    -- Add cross-type operators to integer family
+    ALTER OPERATOR FAMILY pgfdb_integer_ops USING pgfdb_idx ADD
         -- INTEGER to BIGINT comparisons
         OPERATOR 1 < (INTEGER, BIGINT),
         OPERATOR 2 <= (INTEGER, BIGINT),
@@ -151,9 +151,6 @@ use std::ptr;
         OPERATOR 4 >= (DOUBLE PRECISION, REAL),
         OPERATOR 5 > (DOUBLE PRECISION, REAL),
         OPERATOR 6 != (DOUBLE PRECISION, REAL);
-        
-    -- Cross-type operators between numeric and float families are removed
-    -- as the operators don't exist in PostgreSQL by default
     ")]
 pub fn pgfdb_iam_handler() -> IndexAmHandler {
     IndexAmHandler
