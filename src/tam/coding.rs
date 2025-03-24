@@ -1,6 +1,7 @@
 use std::{mem::MaybeUninit, ptr, slice::from_raw_parts};
 
 use pgrx::{
+    ffi::c_char,
     itemptr::item_pointer_set_all,
     pg_sys::{
         fmgr_info, getTypeBinaryInputInfo, getTypeBinaryOutputInfo, Datum, ExecClearTuple,
@@ -173,7 +174,7 @@ fn decode_datum(encoded_datum: &mut [u8], type_oid: Oid) -> Datum {
     unsafe { fmgr_info(function_oid.assume_init_read(), fmgr.as_mut_ptr()) }
 
     let mut string_info = StringInfoData {
-        data: encoded_datum.as_mut_ptr() as *mut i8,
+        data: encoded_datum.as_mut_ptr() as *mut c_char,
         len: encoded_datum.len() as i32,
         maxlen: encoded_datum.len() as i32,
         cursor: 0,
