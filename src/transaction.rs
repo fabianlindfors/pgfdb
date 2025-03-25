@@ -1,8 +1,8 @@
 use std::sync::OnceLock;
 
-use foundationdb::Transaction;
+use foundationdb::{options::TransactionOption, Transaction};
 use pg_sys::XactEvent;
-use pgrx::prelude::*;
+use pgrx::{pg_sys::panic::ErrorReportable, prelude::*};
 use pollster::FutureExt;
 
 // Not sure how well this will work with multiple connections at the same time
@@ -24,8 +24,13 @@ pub fn get_transaction() -> &'static Transaction {
     #[allow(static_mut_refs)]
     unsafe {
         TRANSACTION.get_or_init(|| {
-            let db = foundationdb::Database::default().unwrap();
-            let transaction = db.create_trx().unwrap();
+            let db = foundationdb::Database::default().unwrap_or_report();
+            let transaction = db.create_trx().unwrap_or_report();
+
+            transaction
+                .set_option(TransactionOption::Timeout(5_000))
+                .unwrap_or_report();
+
             log!("TXN: Transaction initiated");
             transaction
         })

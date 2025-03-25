@@ -1,3 +1,5 @@
+use crate::errors::FdbErrorExt;
+use foundationdb::options::TransactionOption;
 use pgrx::prelude::*;
 use pollster::FutureExt;
 
@@ -5,31 +7,13 @@ use pollster::FutureExt;
 // Can be run with `SELECT fdb_is_healthy()`, which will return true if healthy or an error if not.
 #[pg_extern]
 fn fdb_is_healthy() -> bool {
-    let result = foundationdb::Database::default();
+    let db = foundationdb::Database::default().unwrap_or_pg_error();
 
-    let db = match result {
-        Ok(db) => db,
-        Err(err) => panic!("Failed to connect to FDB: {:?}", err),
-    };
+    let txn = db.create_trx().unwrap_or_pg_error();
+    txn.set_option(TransactionOption::Timeout(1000))
+        .unwrap_or_pg_error();
 
-    let result = db
-        .run(|trx, _| async move {
-            trx.set(b"hello", b"Hello, pgfdb!");
-            Ok(())
-        })
-        .block_on();
-
-    if let Err(err) = result {
-        panic!("Failed to write to FDB: {:?}", err);
-    }
-
-    let result = db
-        .run(|trx, _| async move { Ok(trx.get(b"hello", false).await.unwrap()) })
-        .block_on();
-
-    if let Err(err) = result {
-        panic!("Failed to read from FDB: {:?}", err);
-    }
+    txn.get_read_version().block_on().unwrap_or_pg_error();
 
     return true;
 }

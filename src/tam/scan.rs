@@ -11,7 +11,7 @@ use pgrx::{
     PgBox,
 };
 
-use crate::tam::coding;
+use crate::{errors::FdbErrorExt, tam::coding};
 
 use super::coding::Tuple;
 
@@ -88,6 +88,6 @@ impl FdbScanDesc {
             return None;
         };
 
-        Some(tuple.unwrap())
+        Some(tuple.unwrap_or_pg_error())
     }
 }

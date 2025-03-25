@@ -24,7 +24,7 @@ use pgrx_sql_entity_graph::metadata::{
 use pollster::FutureExt;
 use rand::Rng;
 
-use crate::subspace;
+use crate::{errors::FdbErrorExt, subspace};
 
 #[pg_extern(sql = "
     -- We need to use custom SQL to define our TAM handler function as Postgres requires the function signature
@@ -166,6 +166,7 @@ unsafe extern "C" fn rescan(
 ) {
 }
 
+#[pg_guard]
 unsafe extern "C" fn scan_get_next_slot(
     raw_scan: TableScanDesc,
     _direction: ScanDirection::Type,
@@ -246,7 +247,7 @@ unsafe extern "C" fn index_fetch_tuple(
     let key = subspace::table((*(*scan).rel).rd_id).pack(&id);
 
     let txn = crate::transaction::get_transaction();
-    let Some(value) = txn.get(&key, false).block_on().unwrap() else {
+    let Some(value) = txn.get(&key, false).block_on().unwrap_or_pg_error() else {
         return false;
     };
 

@@ -5,6 +5,7 @@ use pgrx::prelude::*;
 
 ::pgrx::pg_module_magic!();
 
+mod errors;
 mod fdb;
 mod health;
 mod iam;

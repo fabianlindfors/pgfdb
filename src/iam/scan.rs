@@ -16,6 +16,7 @@ use pgrx::pg_sys::panic::ErrorReportable;
 use pgrx::pg_sys::{FormData_pg_attribute, ScanKeyData, SK_SEARCHNOTNULL, SK_SEARCHNULL};
 use pgrx::prelude::*;
 
+use crate::errors::FdbErrorExt;
 use crate::iam::utils::encode_datum_for_index;
 
 #[repr(C)]
@@ -90,6 +91,7 @@ pub unsafe extern "C" fn ambeginscan(
 }
 
 // Fetch next tuple from scan
+#[pg_guard]
 pub unsafe extern "C" fn amgettuple(scan: IndexScanDesc, direction: ScanDirection::Type) -> bool {
     log!("IAM: Get tuple, direction={}", direction);
 
@@ -120,7 +122,7 @@ pub unsafe extern "C" fn amgettuple(scan: IndexScanDesc, direction: ScanDirectio
         return false;
     };
 
-    let key_value = result.unwrap_or_report();
+    let key_value = result.unwrap_or_pg_error();
 
     // Unpack the key to get the tuple elements
     let key_tuple_elements: Vec<Element> = unpack(key_value.key()).unwrap_or_report();
