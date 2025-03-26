@@ -57,7 +57,7 @@ COPY --from=builder /usr/src/pgfdb/target/release/pgfdb-pg17/usr/lib/postgresql/
 COPY --from=builder /usr/src/pgfdb/target/release/pgfdb-pg17/usr/share/postgresql/17/extension/* /usr/share/postgresql/17/extension/
 
 # Add a script to create and initialise the extension on database startup
-RUN echo "CREATE EXTENSION pgfdb; ALTER SYSTEM SET default_table_access_method = pgfdb; ALTER SYSTEM SET default_index_access_method = pgfdb_idx;" \
+RUN echo "CREATE EXTENSION pgfdb; ALTER SYSTEM SET default_table_access_method = pgfdb;" \
     > /docker-entrypoint-initdb.d/create_extension.sql
 
 # Expose the PostgreSQL port
