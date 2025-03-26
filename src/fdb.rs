@@ -10,6 +10,10 @@ static NETWORK: OnceLock<NetworkAutoStop> = OnceLock::new();
 
 #[pg_guard]
 pub(crate) fn init() {
+    if NETWORK.get().is_some() {
+        return;
+    }
+
     let network = unsafe { foundationdb::boot() };
 
     // Ensure the network thread was booted and is working
