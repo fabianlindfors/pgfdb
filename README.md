@@ -11,5 +11,7 @@ docker build -t pgfdb .
 Start Docker container:
 
 ```sh
-docker run --name pgfdb -p 5432:5432 -e POSTGRES_PASSWORD=postgres pgfdb
+# Workaround for OrbStack mounting fdb.cluster as a directory rather than file
+cat /usr/local/etc/foundationdb/fdb.cluster > fdb.cluster
+docker run --net=host -v $(pwd)/fdb.cluster:/etc/foundationdb/fdb.cluster -e POSTGRES_PASSWORD=postgres pgfdb
 ```
