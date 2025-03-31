@@ -45,6 +45,19 @@ mod tests {
     }
 
     #[pg_test]
+    fn update() {
+        Spi::run("CREATE TABLE test (id INTEGER) USING pgfdb").unwrap();
+        Spi::run("INSERT INTO test (id) VALUES (10), (11), (12)").unwrap();
+
+        Spi::run("UPDATE test SET id = 12 WHERE id = 10").unwrap();
+
+        let result: i64 = Spi::get_one("SELECT count(*) FROM test WHERE id = 12")
+            .unwrap()
+            .unwrap();
+        assert_eq!(2, result);
+    }
+
+    #[pg_test]
     fn select() {
         Spi::run("CREATE TABLE test (id INTEGER) USING pgfdb").unwrap();
 

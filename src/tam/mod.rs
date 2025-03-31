@@ -356,9 +356,9 @@ unsafe extern "C" fn tuple_delete(
 
 #[pg_guard]
 unsafe extern "C" fn tuple_update(
-    _rel: Relation,
-    _otid: ItemPointer,
-    _slot: *mut TupleTableSlot,
+    rel: Relation,
+    otid: ItemPointer,
+    slot: *mut TupleTableSlot,
     _cid: CommandId,
     _snapshot: Snapshot,
     _crosscheck: Snapshot,
@@ -369,15 +369,20 @@ unsafe extern "C" fn tuple_update(
 ) -> TM_Result::Type {
     log!("TAM: Update tuple");
 
-    // let row = Row::from_pg_with_id(rel, slot, otid);
-    // database::insert_row(&row);
+    let id = item_pointer_get_block_number_no_check(*otid);
+    let tuple = coding::Tuple::from_tts(id, slot.as_ref().unwrap());
+    let encoded = tuple.serialize();
 
-    // Write back TID to slot (same as previous one)
-    // row.into_tuple_slot(slot);
+    let key = subspace::table((*rel).rd_id).pack(&id);
+    let txn = crate::transaction::get_transaction();
+    txn.set(&key, &encoded);
+
+    // Store back the old TID as the new one as we don't handle visibility checks and don't need new IDs
+    (*slot).tts_tid = *otid;
 
     *update_indexes = TU_UpdateIndexes::TU_All;
 
-    return 0;
+    return TM_Result::TM_Ok;
 }
 
 #[pg_guard]
@@ -551,8 +556,8 @@ unsafe extern "C" fn parallelscan_reinitialize(_rel: Relation, _pscan: ParallelT
 
 #[pg_guard]
 unsafe extern "C" fn tuple_fetch_row_version(
-    _rel: Relation,
-    _tid: ItemPointer,
+    rel: Relation,
+    tid: ItemPointer,
     _snapshot: Snapshot,
     slot: *mut TupleTableSlot,
 ) -> bool {
@@ -562,14 +567,19 @@ unsafe extern "C" fn tuple_fetch_row_version(
         clear(slot);
     }
 
-    // database::get_row_by_id(
-    //     rel,
-    //     item_pointer_get_block_number(tid).try_into().unwrap(),
-    //     slot,
-    // )
-    // .unwrap();
+    let id = item_pointer_get_block_number_no_check(*tid);
+    let table_oid = unsafe { (*rel).rd_id };
+    let key = subspace::table(table_oid).pack(&id);
 
-    // ExecStoreVirtualTuple(slot);
+    // TODO: This can probably be optimized if we already fetched the tuple in the previous plan node
+    // This would for example be the case if doing an UPDATE
+    let txn = crate::transaction::get_transaction();
+    let Some(data) = txn.get(&key, false).block_on().unwrap_or_pg_error() else {
+        return false;
+    };
+
+    let tuple = coding::Tuple::deserialize(&data);
+    tuple.load_into_tts(slot.as_mut().unwrap());
 
     return true;
 }
