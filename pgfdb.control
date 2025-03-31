@@ -1,4 +1,4 @@
-comment = 'pgfdb:  Created by pgrx'
+comment = 'pgfdb:  Make Postgres distributed using FoundationDB'
 default_version = '@CARGO_VERSION@'
 module_pathname = '$libdir/pgfdb'
 relocatable = false
