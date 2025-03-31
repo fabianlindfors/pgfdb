@@ -214,11 +214,8 @@ fn range_options_for_scan<'a>(
         }
 
         let attr = attrs[head_scan_key.sk_attno as usize - 1];
-        if let Some(element) = encode_datum_for_index(head_scan_key.sk_argument, attr.atttypid) {
-            head_tuple_elements.push(element);
-        } else {
-            panic!("IAM: Failed to encode scan key datum for index");
-        }
+        let element = encode_datum_for_index(head_scan_key.sk_argument, attr.atttypid);
+        head_tuple_elements.push(element);
     }
 
     // If we have a multi-column index and query, we will now have some `head_tuple_elements`
@@ -239,10 +236,7 @@ fn range_options_for_scan<'a>(
         // If this is an IS NULL or IS NOT NULL scan, we shouldn't encode and instead just use the tuple nil value
         Element::Nil
     } else {
-        match encode_datum_for_index(last.sk_argument, attr.atttypid) {
-            Some(element) => element,
-            None => panic!("IAM: Failed to encode scan key datum for index"),
-        }
+        encode_datum_for_index(last.sk_argument, attr.atttypid)
     };
 
     // Based on what the operator (strategy) is for the final key, construct the final search range

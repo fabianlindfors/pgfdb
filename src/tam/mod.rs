@@ -1,4 +1,4 @@
-use std::ptr::addr_of_mut;
+use std::{cell::RefCell, ptr::addr_of_mut};
 
 mod coding;
 mod scan;
@@ -66,6 +66,44 @@ pub struct FdbIndexFetchTableData {
     pub base: IndexFetchTableData,
     // Add any custom fields we need for index operations
     pub current_id: u32,
+}
+
+pub static mut TUPLE_CACHE: RefCell<TupleCache> = RefCell::new(TupleCache::new());
+
+pub struct TupleCache {
+    pub id: Option<u32>,
+    pub tuple: *mut TupleTableSlot,
+}
+
+impl TupleCache {
+    const fn new() -> TupleCache {
+        TupleCache {
+            id: None,
+            tuple: std::ptr::null_mut(),
+        }
+    }
+
+    pub fn get_with_id(&self, id: u32) -> Option<(u32, *mut TupleTableSlot)> {
+        let Some(stored_id) = self.id else {
+            return None;
+        };
+
+        if stored_id != id {
+            return None;
+        }
+
+        return Some((stored_id, self.tuple));
+    }
+
+    pub fn populate(&mut self, id: u32, tuple: *mut TupleTableSlot) {
+        self.id = Some(id);
+        self.tuple = tuple;
+    }
+
+    pub fn clear(&mut self) {
+        self.id = None;
+        self.tuple = std::ptr::null_mut();
+    }
 }
 
 static mut FDB_TABLE_AM_ROUTINE: TableAmRoutine = TableAmRoutine {
@@ -153,6 +191,8 @@ unsafe extern "C" fn scan_begin(
 unsafe extern "C" fn scan_end(scan: TableScanDesc) {
     log!("TAM: Scan end");
     let mut _fscan = scan as *mut scan::FdbScanDesc;
+
+    TUPLE_CACHE.borrow_mut().clear();
 }
 
 #[pg_guard]
@@ -580,6 +620,8 @@ unsafe extern "C" fn tuple_fetch_row_version(
 
     let tuple = coding::Tuple::deserialize(&data);
     tuple.load_into_tts(slot.as_mut().unwrap());
+
+    TUPLE_CACHE.borrow_mut().populate(id, slot);
 
     return true;
 }
