@@ -163,7 +163,7 @@ fn encode_datum(datum: &Datum, type_oid: Oid) -> Vec<u8> {
     encoded.to_vec()
 }
 
-fn decode_datum(encoded_datum: &mut [u8], type_oid: Oid) -> Datum {
+pub fn decode_datum(encoded_datum: &mut [u8], type_oid: Oid) -> Datum {
     // Get the binary deserialization function oid for the datum type
     let mut function_oid = MaybeUninit::<Oid>::uninit();
     let mut io_param = MaybeUninit::<Oid>::uninit();

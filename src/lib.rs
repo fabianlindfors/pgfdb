@@ -5,6 +5,7 @@ use pgrx::prelude::*;
 
 ::pgrx::pg_module_magic!();
 
+mod coding;
 mod errors;
 mod fdb;
 mod health;
@@ -101,6 +102,28 @@ mod tests {
     fn create_index() {
         Spi::run("CREATE TABLE test (id INTEGER) USING pgfdb").unwrap();
         Spi::run("CREATE INDEX id_idx ON test USING pgfdb_idx(id)").unwrap();
+    }
+
+    #[pg_test]
+    fn create_index_with_existing_rows() {
+        Spi::run("CREATE TABLE test (id INTEGER) USING pgfdb").unwrap();
+        Spi::run("INSERT INTO test(id) VALUES (1), (2), (3)").unwrap();
+
+        Spi::run("CREATE INDEX id_idx ON test USING pgfdb_idx(id)").unwrap();
+
+        // Ensure the select will use our index
+        Spi::run("SET enable_seqscan=0").unwrap();
+        let explain = Spi::explain(&format!("SELECT count(*) FROM test WHERE id = 2")).unwrap();
+        assert!(
+            format!("{:?}", explain).contains("Index Name"),
+            "expected query plan to use index: {:?}",
+            explain.0.to_string()
+        );
+
+        // Ensure querying using the index returns the correct results
+        let result: Option<i64> =
+            Spi::get_one(&format!("SELECT count(*) FROM test WHERE id = 2")).unwrap();
+        assert_eq!(Some(1), result);
     }
 
     #[pg_test]

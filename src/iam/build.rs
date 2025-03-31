@@ -1,29 +1,63 @@
 use std::slice::from_raw_parts_mut;
 
-use crate::iam::utils::encode_datum_for_index;
+use crate::{errors::FdbErrorExt, iam::utils::encode_datum_for_index};
+use foundationdb::RangeOption;
+use futures::StreamExt;
 use pg_sys::{Datum, IndexBuildResult, IndexInfo, IndexUniqueCheck, ItemPointer, Relation};
 use pgrx::{
     pg_sys::{FormData_pg_attribute, Oid},
     prelude::*,
 };
+use pollster::FutureExt;
 
 // Index build function - Called when CREATE INDEX is executed
 pub unsafe extern "C" fn ambuild(
-    _heap_relation: Relation,
-    _index_relation: Relation,
+    heap_relation: Relation,
+    index_relation: Relation,
     _index_info: *mut IndexInfo,
 ) -> *mut IndexBuildResult {
     log!("IAM: Build index");
 
-    let mut build_result = unsafe { PgBox::<IndexBuildResult>::alloc() };
-    build_result.heap_tuples = 0.0;
-    build_result.index_tuples = 0.0;
+    let mut num_rows = 0;
 
-    // TODO: Actually build the index structure in FDB
-    // 1. Create a new subspace for the index
-    // 2. Scan the heap relation
-    // 3. Extract index keys from heap tuples
-    // 4. Insert index entries into FDB
+    let index_oid = unsafe { (*index_relation).rd_id };
+    let index_tuple_desc = unsafe { (*index_relation).rd_att };
+    let natts = unsafe { (*index_tuple_desc).natts as usize };
+    let attrs = (*index_tuple_desc).attrs.as_slice(natts);
+
+    let table_oid = unsafe { (*heap_relation).rd_id };
+    let table_subspace = crate::subspace::table(table_oid);
+
+    let txn = crate::transaction::get_transaction();
+    let range_option = RangeOption::from(table_subspace.range());
+
+    let mut stream = txn.get_ranges_keyvalues(range_option, false);
+    while let Some(item) = stream.next().block_on() {
+        let value = item.unwrap_or_pg_error();
+        let tuple = crate::coding::Tuple::deserialize(value.value());
+
+        let mut values: Vec<Datum> = Vec::with_capacity(tuple.datums.len());
+        let mut isnull: Vec<bool> = Vec::with_capacity(tuple.datums.len());
+        for (i, maybe_encoded_datum) in tuple.datums.into_iter().enumerate() {
+            if let Some(mut encoded_datum) = maybe_encoded_datum {
+                let datum = crate::coding::decode_datum(&mut encoded_datum, attrs[i].atttypid);
+                values.push(datum);
+                isnull.push(false);
+            } else {
+                values.push(Datum::null());
+                isnull.push(true);
+            }
+        }
+
+        let key = build_key_from_values(index_oid, tuple.id, natts, attrs, &values, &isnull);
+        txn.set(&key, &[]);
+
+        num_rows += 1;
+    }
+
+    let mut build_result = unsafe { PgBox::<IndexBuildResult>::alloc() };
+    build_result.heap_tuples = num_rows.into();
+    build_result.index_tuples = num_rows.into();
     build_result.into_pg()
 }
 

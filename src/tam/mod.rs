@@ -1,6 +1,5 @@
 use std::ptr::addr_of_mut;
 
-mod coding;
 mod scan;
 
 use pgrx::{
@@ -254,7 +253,7 @@ unsafe extern "C" fn index_fetch_tuple(
     };
 
     // Decode the value into our intermediate data structure
-    let tuple = coding::Tuple::deserialize(&value);
+    let tuple = crate::coding::Tuple::deserialize(&value);
 
     // Store the decoded values on the TTS
     tuple.load_into_tts(slot.as_mut().unwrap());
@@ -288,7 +287,7 @@ unsafe extern "C" fn tuple_insert(
     //     id
     // );
 
-    let tuple = coding::Tuple::from_tts(id, slot.as_ref().unwrap());
+    let tuple = crate::coding::Tuple::from_tts(id, slot.as_ref().unwrap());
     let encoded = tuple.serialize();
 
     let key = subspace::table((*rel).rd_id).pack(&id);
@@ -372,7 +371,7 @@ unsafe extern "C" fn tuple_update(
     log!("TAM: Update tuple");
 
     let id = item_pointer_get_block_number_no_check(*otid);
-    let tuple = coding::Tuple::from_tts(id, slot.as_ref().unwrap());
+    let tuple = crate::coding::Tuple::from_tts(id, slot.as_ref().unwrap());
     let encoded = tuple.serialize();
 
     let key = subspace::table((*rel).rd_id).pack(&id);
@@ -580,7 +579,7 @@ unsafe extern "C" fn tuple_fetch_row_version(
         return false;
     };
 
-    let tuple = coding::Tuple::deserialize(&data);
+    let tuple = crate::coding::Tuple::deserialize(&data);
     tuple.load_into_tts(slot.as_mut().unwrap());
 
     crate::tuple_cache::populate(id, slot);

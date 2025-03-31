@@ -11,14 +11,12 @@ use pgrx::{
     PgBox,
 };
 
-use crate::{errors::FdbErrorExt, tam::coding};
-
-use super::coding::Tuple;
+use crate::errors::FdbErrorExt;
 
 #[repr(C)]
 pub struct FdbScanDesc {
     base: TableScanDescData,
-    values: BoxStream<'static, FdbResult<Tuple>>,
+    values: BoxStream<'static, FdbResult<crate::coding::Tuple>>,
 }
 
 impl FdbScanDesc {
@@ -55,7 +53,7 @@ impl FdbScanDesc {
                 futures::stream::iter(
                     values
                         .into_iter()
-                        .map(|keyvalue| Ok(coding::Tuple::deserialize(keyvalue.value()))),
+                        .map(|keyvalue| Ok(crate::coding::Tuple::deserialize(keyvalue.value()))),
                 )
             })
             .try_flatten()
@@ -72,7 +70,7 @@ impl FdbScanDesc {
         scan.into_pg() as *mut TableScanDescData
     }
 
-    pub fn next_value(self: &mut FdbScanDesc) -> Option<Tuple> {
+    pub fn next_value(self: &mut FdbScanDesc) -> Option<crate::coding::Tuple> {
         let mut next_fut = self.values.next();
         let mut ctx = Context::from_waker(&Waker::noop());
         let next = loop {
