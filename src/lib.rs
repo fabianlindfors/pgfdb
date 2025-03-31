@@ -12,6 +12,7 @@ mod iam;
 mod subspace;
 mod tam;
 mod transaction;
+mod tuple_cache;
 
 #[pg_guard]
 pub extern "C" fn _PG_init() {

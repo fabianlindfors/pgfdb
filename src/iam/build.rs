@@ -58,7 +58,7 @@ pub unsafe extern "C" fn aminsert(
     // If this was an update, we need to clear any existing index key
     // TODO: Using TUPLE_CACHE here seems like it might go wrong if we are not in an update
     // (although doing extra key clearing should still be correct)
-    if let Some((_, existing_slot)) = crate::tam::TUPLE_CACHE.borrow().get_with_id(id) {
+    if let Some((_, existing_slot)) = crate::tuple_cache::get_with_id(id) {
         let old_values = from_raw_parts_mut((*existing_slot).tts_values, natts);
         let old_isnull = from_raw_parts_mut((*existing_slot).tts_isnull, natts);
 
