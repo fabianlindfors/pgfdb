@@ -32,7 +32,7 @@ pub extern "C" fn _PG_init() {
 #[cfg(any(test, feature = "pg_test"))]
 #[pg_schema]
 mod tests {
-    use pgrx::prelude::*;
+    use pgrx::{prelude::*, Uuid};
 
     #[pg_test]
     fn create_table() {
@@ -61,14 +61,17 @@ mod tests {
 
     #[pg_test]
     fn select() {
-        Spi::run("CREATE TABLE test (id INTEGER) USING pgfdb").unwrap();
+        Spi::run("CREATE TABLE test (id INTEGER, uuid UUID) USING pgfdb").unwrap();
 
-        Spi::run("INSERT INTO test (id) VALUES (1), (2), (3), (4)").unwrap();
+        Spi::run(
+            "INSERT INTO test (id, uuid) VALUES (1, gen_random_uuid()), (2, gen_random_uuid())",
+        )
+        .unwrap();
 
-        let result: i32 = Spi::get_one("SELECT id FROM test WHERE id = 3")
-            .unwrap()
-            .unwrap();
-        assert_eq!(3, result);
+        let (id, uuid): (Option<i32>, Option<Uuid>) =
+            Spi::get_two("SELECT id, uuid FROM test WHERE id = 2").unwrap();
+        assert_eq!(2, id.unwrap());
+        assert!(uuid.is_some());
     }
 
     #[pg_test]
@@ -137,6 +140,11 @@ mod tests {
     const FLOAT_TEST_VALUES: (&'static str, &'static str, &'static str) = ("1.1", "2.2", "3.3");
     const STRING_TEST_VALUES: (&'static str, &'static str, &'static str) =
         ("'test1'", "'test2'", "'test3'");
+    const UUID_TEST_VALUES: (&'static str, &'static str, &'static str) = (
+        "'00be8a3b-7747-4d96-a60e-0a0289825433'",
+        "'573a831e-4c5a-4888-b98f-51f8e0017985'",
+        "'c552b673-47ba-4734-bd34-36905f1bf815'",
+    );
 
     #[pg_test]
     fn select_eq_with_index() {
@@ -147,6 +155,7 @@ mod tests {
             ("REAL", FLOAT_TEST_VALUES),
             ("FLOAT", FLOAT_TEST_VALUES),
             ("TEXT", STRING_TEST_VALUES),
+            ("UUID", UUID_TEST_VALUES),
         ];
 
         for (column_type, (value1, value2, value3)) in cases {
@@ -195,6 +204,7 @@ mod tests {
             ("REAL", FLOAT_TEST_VALUES),
             ("FLOAT", FLOAT_TEST_VALUES),
             ("TEXT", STRING_TEST_VALUES),
+            ("UUID", UUID_TEST_VALUES),
         ];
 
         for (column_type, (value1, value2, value3)) in cases {

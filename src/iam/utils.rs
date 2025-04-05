@@ -1,4 +1,5 @@
 use foundationdb::tuple::Element;
+use foundationdb::tuple::Uuid;
 use pg_sys::{Datum, Oid};
 use pgrx::prelude::*;
 use std::borrow::Cow;
@@ -43,6 +44,11 @@ pub fn encode_datum_for_index<'a>(datum: Datum, type_oid: Oid) -> Element<'a> {
             // Convert the datum to a Rust f64 for storage in FDB
             let value = unsafe { pg_sys::DatumGetFloat8(datum) };
             Element::Double(value)
+        }
+        // UUID (OID 2950)
+        pg_sys::UUIDOID => {
+            let uuid: pgrx::Uuid = unsafe { pgrx::Uuid::from_datum(datum, false).unwrap() };
+            Element::Uuid(Uuid::from_bytes(uuid.as_bytes().clone()))
         }
         // Add more types as needed
         _ => {

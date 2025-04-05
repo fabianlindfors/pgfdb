@@ -84,6 +84,15 @@ use std::ptr;
     OPERATOR 5 > (DOUBLE PRECISION, DOUBLE PRECISION),
     OPERATOR 6 != (DOUBLE PRECISION, DOUBLE PRECISION);
     
+    -- Operator class for UUID type
+    CREATE OPERATOR FAMILY pgfdb_uuid_ops USING pgfdb_idx;
+    
+    CREATE OPERATOR CLASS pgfdb_idx_uuid
+    DEFAULT FOR TYPE UUID USING pgfdb_idx 
+    FAMILY pgfdb_uuid_ops AS
+    OPERATOR 3 = (UUID, UUID),
+    OPERATOR 6 != (UUID, UUID);
+    
     -- Add cross-type operators to integer family
     ALTER OPERATOR FAMILY pgfdb_integer_ops USING pgfdb_idx ADD
         -- INTEGER to BIGINT comparisons
