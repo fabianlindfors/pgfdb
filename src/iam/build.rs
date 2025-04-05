@@ -110,7 +110,7 @@ pub unsafe extern "C" fn aminsert(
     true
 }
 
-fn build_key_from_values(
+pub fn build_key_from_values(
     index_oid: Oid,
     id: u32,
     natts: usize,

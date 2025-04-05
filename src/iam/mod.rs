@@ -1,4 +1,4 @@
-mod build;
+pub(crate) mod build;
 mod scan;
 mod utils;
 

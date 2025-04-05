@@ -156,6 +156,32 @@ mod tests {
         Spi::run("INSERT INTO test(id) VALUES (1)").unwrap();
     }
 
+    #[pg_test]
+    fn delete_with_index() {
+        Spi::run("CREATE TABLE test (id INTEGER, name TEXT) USING pgfdb").unwrap();
+        Spi::run("CREATE INDEX name_idx ON test USING pgfdb_idx(name)").unwrap();
+
+        Spi::run("INSERT INTO test(id, name) VALUES (1, 'Test Person')").unwrap();
+        Spi::run("DELETE FROM test WHERE name = 'Test Person'").unwrap();
+
+        Spi::run("SET enable_seqscan=0").unwrap();
+        let explain = Spi::explain(&format!(
+            "SELECT count(*) FROM test WHERE name = 'Test Person'"
+        ))
+        .unwrap();
+        assert!(
+            format!("{:?}", explain).contains("Index Name"),
+            "expected query plan to use index: {:?}",
+            explain.0.to_string()
+        );
+
+        let result: Option<i64> = Spi::get_one(&format!(
+            "SELECT count(*) FROM test WHERE name = 'Test Person'"
+        ))
+        .unwrap();
+        assert_eq!(Some(0), result);
+    }
+
     const INTEGER_TEST_VALUES: (&'static str, &'static str, &'static str) = ("1", "2", "3");
     const FLOAT_TEST_VALUES: (&'static str, &'static str, &'static str) = ("1.1", "2.2", "3.3");
     const STRING_TEST_VALUES: (&'static str, &'static str, &'static str) =
