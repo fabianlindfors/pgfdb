@@ -60,6 +60,26 @@ mod tests {
     }
 
     #[pg_test]
+    fn delete() {
+        Spi::run("CREATE TABLE test (id INTEGER) USING pgfdb").unwrap();
+        Spi::run("INSERT INTO test (id) VALUES (1), (2), (2), (3)").unwrap();
+
+        let initial_count: i64 = Spi::get_one("SELECT count(*) FROM test WHERE id = 2")
+            .unwrap()
+            .unwrap();
+        assert_eq!(2, initial_count);
+
+        Spi::run("DELETE FROM test WHERE id = 2").unwrap();
+
+        let remaining_count: i64 = Spi::get_one("SELECT count(*) FROM test").unwrap().unwrap();
+        assert_eq!(2, remaining_count);
+        let deleted_count: i64 = Spi::get_one("SELECT count(*) FROM test WHERE id = 2")
+            .unwrap()
+            .unwrap();
+        assert_eq!(0, deleted_count);
+    }
+
+    #[pg_test]
     fn select() {
         Spi::run("CREATE TABLE test (id INTEGER, uuid UUID) USING pgfdb").unwrap();
 
