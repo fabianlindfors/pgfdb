@@ -23,9 +23,9 @@ jobs:
 
       - name: Install and start FoundationDB
         run: |
-          wget https://github.com/apple/foundationdb/releases/download/7.1.25/foundationdb-clients_7.1.25-1_amd64.deb
-          wget https://github.com/apple/foundationdb/releases/download/7.1.25/foundationdb-server_7.1.25-1_amd64.deb
-          sudo dpkg -i foundationdb-clients_7.1.25-1_amd64.deb foundationdb-server_7.1.25-1_amd64.deb
+          wget https://github.com/apple/foundationdb/releases/download/7.3.63/foundationdb-clients_7.3.63-1_amd64.deb
+          wget https://github.com/apple/foundationdb/releases/download/7.3.63/foundationdb-server_7.3.63-1_amd64.deb
+          sudo dpkg -i foundationdb-clients_7.3.63-1_amd64.deb foundationdb-server_7.3.63-1_amd64.deb
           sudo service foundationdb start
           fdbcli --exec "configure single memory"
 
@@ -34,6 +34,8 @@ jobs:
           sudo apt-get update
           sudo apt-get install build-essential libreadline-dev zlib1g-dev flex bison libxml2-dev libxslt-dev libssl-dev libxml2-utils xsltproc ccache pkg-config
           sudo apt install clang
+
+      - uses: Swatinem/rust-cache@v2
 
       - name: Install and initialize cargo-pgrx
         run: |
