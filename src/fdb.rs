@@ -1,14 +1,13 @@
 use std::sync::OnceLock;
 
 use foundationdb::api::NetworkAutoStop;
-use pgrx::{pg_sys::panic::ErrorReportable, prelude::*};
+use pgrx::pg_sys::panic::ErrorReportable;
 use pollster::FutureExt;
 
 use crate::errors::FdbErrorExt;
 
 static NETWORK: OnceLock<NetworkAutoStop> = OnceLock::new();
 
-#[pg_guard]
 pub(crate) fn init() {
     if NETWORK.get().is_some() {
         return;

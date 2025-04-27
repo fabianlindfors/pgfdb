@@ -55,7 +55,7 @@ pub fn encode_datum_for_index<'a>(datum: Datum, type_oid: Oid) -> Element<'a> {
             // Log unsupported types
             panic!(
                 "IAM: encode_datum_for_index not yet implemented for type OID: {}",
-                type_oid.as_u32()
+                type_oid.to_u32()
             );
         }
     }

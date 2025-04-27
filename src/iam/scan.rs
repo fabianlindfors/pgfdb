@@ -28,7 +28,7 @@ struct FdbIndexScan {
 }
 
 // https://www.postgresql.org/docs/current/index-cost-estimation.html
-pub unsafe extern "C" fn amcostestimate(
+pub unsafe extern "C-unwind" fn amcostestimate(
     root: *mut PlannerInfo,
     path: *mut IndexPath,
     _loop_count: f64,
@@ -59,7 +59,7 @@ pub unsafe extern "C" fn amcostestimate(
 }
 
 // Begin an index scan
-pub unsafe extern "C" fn ambeginscan(
+pub unsafe extern "C-unwind" fn ambeginscan(
     index_relation: Relation,
     nkeys: i32,
     norderbys: i32,
@@ -92,7 +92,10 @@ pub unsafe extern "C" fn ambeginscan(
 
 // Fetch next tuple from scan
 #[pg_guard]
-pub unsafe extern "C" fn amgettuple(scan: IndexScanDesc, direction: ScanDirection::Type) -> bool {
+pub unsafe extern "C-unwind" fn amgettuple(
+    scan: IndexScanDesc,
+    direction: ScanDirection::Type,
+) -> bool {
     log!("IAM: Get tuple, direction={}", direction);
 
     // Only support forward scans for now
@@ -151,7 +154,7 @@ pub unsafe extern "C" fn amgettuple(scan: IndexScanDesc, direction: ScanDirectio
 
 // Restart a scan with new scan keys
 #[pg_guard]
-pub unsafe extern "C" fn amrescan(
+pub unsafe extern "C-unwind" fn amrescan(
     scan: IndexScanDesc,
     keys: ScanKey,
     nkeys: ::std::os::raw::c_int,
@@ -301,7 +304,7 @@ fn range_options_for_scan<'a>(
 }
 
 // End an index scan
-pub unsafe extern "C" fn amendscan(scan: IndexScanDesc) {
+pub unsafe extern "C-unwind" fn amendscan(scan: IndexScanDesc) {
     log!("IAM: End scan");
 
     let fdb_scan = scan as *mut FdbIndexScan;

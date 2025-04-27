@@ -11,7 +11,7 @@ use pgrx::{
 use pollster::FutureExt;
 
 // Index build function - Called when CREATE INDEX is executed
-pub unsafe extern "C" fn ambuild(
+pub unsafe extern "C-unwind" fn ambuild(
     heap_relation: Relation,
     index_relation: Relation,
     _index_info: *mut IndexInfo,
@@ -61,12 +61,12 @@ pub unsafe extern "C" fn ambuild(
     build_result.into_pg()
 }
 
-pub unsafe extern "C" fn ambuildempty(_heap_relation: Relation) {
+pub unsafe extern "C-unwind" fn ambuildempty(_heap_relation: Relation) {
     log!("IAM: Build empty index");
 }
 
 // Insert an index tuple
-pub unsafe extern "C" fn aminsert(
+pub unsafe extern "C-unwind" fn aminsert(
     index_relation: Relation,
     raw_values: *mut Datum,
     raw_isnull: *mut bool,

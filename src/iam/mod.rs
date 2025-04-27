@@ -167,8 +167,7 @@ pub fn pgfdb_iam_handler() -> IndexAmHandler {
 
 // https://www.postgresql.org/docs/current/index-api.html
 // Index build function - Called when CREATE INDEX is executed
-
-unsafe extern "C" fn amoptions(_reloptions: Datum, _validate: bool) -> *mut bytea {
+unsafe extern "C-unwind" fn amoptions(_reloptions: Datum, _validate: bool) -> *mut bytea {
     // Null for default behaviour
     // We don't support any options on the index yet
     ptr::null_mut()

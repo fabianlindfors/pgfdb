@@ -10,7 +10,10 @@ use pollster::FutureExt;
 static mut TRANSACTION: OnceLock<Transaction> = OnceLock::new();
 
 #[pg_guard]
-pub unsafe extern "C" fn transaction_callback(event: u32, _arg: *mut ::std::os::raw::c_void) {
+pub unsafe extern "C-unwind" fn transaction_callback(
+    event: u32,
+    _arg: *mut ::std::os::raw::c_void,
+) {
     match event {
         XactEvent::XACT_EVENT_COMMIT => commit_transaction(),
         XactEvent::XACT_EVENT_ABORT => abort_transaction(),

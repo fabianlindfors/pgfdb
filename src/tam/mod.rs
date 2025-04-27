@@ -134,13 +134,13 @@ static mut FDB_TABLE_AM_ROUTINE: TableAmRoutine = TableAmRoutine {
 };
 
 #[pg_guard]
-unsafe extern "C" fn slot_callbacks(_rel: Relation) -> *const TupleTableSlotOps {
+unsafe extern "C-unwind" fn slot_callbacks(_rel: Relation) -> *const TupleTableSlotOps {
     log!("TAM: Using custom slot callbacks");
     &TTSOpsVirtual
 }
 
 #[pg_guard]
-unsafe extern "C" fn scan_begin(
+unsafe extern "C-unwind" fn scan_begin(
     rel: Relation,
     snapshot: Snapshot,
     nkeys: ::std::os::raw::c_int,
@@ -153,7 +153,7 @@ unsafe extern "C" fn scan_begin(
 }
 
 #[pg_guard]
-unsafe extern "C" fn scan_end(scan: TableScanDesc) {
+unsafe extern "C-unwind" fn scan_end(scan: TableScanDesc) {
     log!("TAM: Scan end");
     let mut _fscan = scan as *mut scan::FdbScanDesc;
 
@@ -161,7 +161,7 @@ unsafe extern "C" fn scan_end(scan: TableScanDesc) {
 }
 
 #[pg_guard]
-unsafe extern "C" fn rescan(
+unsafe extern "C-unwind" fn rescan(
     _scan: TableScanDesc,
     _key: *mut ScanKeyData,
     _set_params: bool,
@@ -172,7 +172,7 @@ unsafe extern "C" fn rescan(
 }
 
 #[pg_guard]
-unsafe extern "C" fn scan_get_next_slot(
+unsafe extern "C-unwind" fn scan_get_next_slot(
     raw_scan: TableScanDesc,
     _direction: ScanDirection::Type,
     slot: *mut TupleTableSlot,
@@ -193,7 +193,7 @@ unsafe extern "C" fn scan_get_next_slot(
 }
 
 #[pg_guard]
-unsafe extern "C" fn scan_set_tidrange(
+unsafe extern "C-unwind" fn scan_set_tidrange(
     _scan: TableScanDesc,
     _mintid: ItemPointer,
     _maxtid: ItemPointer,
@@ -202,7 +202,7 @@ unsafe extern "C" fn scan_set_tidrange(
 }
 
 #[pg_guard]
-unsafe extern "C" fn scan_get_next_slot_tidrange(
+unsafe extern "C-unwind" fn scan_get_next_slot_tidrange(
     _scan: TableScanDesc,
     _direction: ScanDirection::Type,
     _slot: *mut TupleTableSlot,
@@ -212,7 +212,7 @@ unsafe extern "C" fn scan_get_next_slot_tidrange(
 }
 
 #[pg_guard]
-unsafe extern "C" fn index_fetch_begin(rel: Relation) -> *mut IndexFetchTableData {
+unsafe extern "C-unwind" fn index_fetch_begin(rel: Relation) -> *mut IndexFetchTableData {
     log!("TAM: Index fetch begin");
     let mut index_scan = unsafe { PgBox::<FdbIndexFetchTableData>::alloc() };
 
@@ -223,18 +223,18 @@ unsafe extern "C" fn index_fetch_begin(rel: Relation) -> *mut IndexFetchTableDat
 }
 
 #[pg_guard]
-unsafe extern "C" fn index_fetch_reset(_data: *mut IndexFetchTableData) {
+unsafe extern "C-unwind" fn index_fetch_reset(_data: *mut IndexFetchTableData) {
     log!("TAM: Index fetch reset");
 }
 
 #[pg_guard]
-unsafe extern "C" fn index_fetch_end(data: *mut IndexFetchTableData) {
+unsafe extern "C-unwind" fn index_fetch_end(data: *mut IndexFetchTableData) {
     log!("TAM: Index fetch end");
     let _index_scan = data as *mut FdbIndexFetchTableData;
 }
 
 #[pg_guard]
-unsafe extern "C" fn index_fetch_tuple(
+unsafe extern "C-unwind" fn index_fetch_tuple(
     scan: *mut IndexFetchTableData,
     tid: ItemPointer,
     _snapshot: Snapshot,
@@ -266,7 +266,7 @@ unsafe extern "C" fn index_fetch_tuple(
 }
 
 #[pg_guard]
-unsafe extern "C" fn tuple_insert(
+unsafe extern "C-unwind" fn tuple_insert(
     rel: Relation,
     slot: *mut TupleTableSlot,
     _cid: CommandId,
@@ -300,7 +300,7 @@ unsafe extern "C" fn tuple_insert(
 }
 
 #[pg_guard]
-unsafe extern "C" fn tuple_insert_speculative(
+unsafe extern "C-unwind" fn tuple_insert_speculative(
     _rel: Relation,
     _slot: *mut TupleTableSlot,
     _cid: CommandId,
@@ -311,7 +311,7 @@ unsafe extern "C" fn tuple_insert_speculative(
 }
 
 #[pg_guard]
-unsafe extern "C" fn tuple_complete_speculative(
+unsafe extern "C-unwind" fn tuple_complete_speculative(
     _rel: Relation,
     _slot: *mut TupleTableSlot,
     _spec_token: uint32,
@@ -320,7 +320,7 @@ unsafe extern "C" fn tuple_complete_speculative(
 }
 
 #[pg_guard]
-unsafe extern "C" fn multi_insert(
+unsafe extern "C-unwind" fn multi_insert(
     _rel: Relation,
     _slots: *mut *mut TupleTableSlot,
     _nslots: ::std::os::raw::c_int,
@@ -331,7 +331,7 @@ unsafe extern "C" fn multi_insert(
 }
 
 #[pg_guard]
-unsafe extern "C" fn tuple_delete(
+unsafe extern "C-unwind" fn tuple_delete(
     rel: Relation,
     tid: ItemPointer,
     _cid: CommandId,
@@ -423,7 +423,7 @@ unsafe extern "C" fn tuple_delete(
 }
 
 #[pg_guard]
-unsafe extern "C" fn tuple_update(
+unsafe extern "C-unwind" fn tuple_update(
     rel: Relation,
     otid: ItemPointer,
     slot: *mut TupleTableSlot,
@@ -454,7 +454,7 @@ unsafe extern "C" fn tuple_update(
 }
 
 #[pg_guard]
-unsafe extern "C" fn tuple_lock(
+unsafe extern "C-unwind" fn tuple_lock(
     _rel: Relation,
     _tid: ItemPointer,
     _snapshot: Snapshot,
@@ -470,7 +470,7 @@ unsafe extern "C" fn tuple_lock(
 }
 
 #[pg_guard]
-unsafe extern "C" fn fetch_row_version(
+unsafe extern "C-unwind" fn fetch_row_version(
     _rel: Relation,
     _tid: ItemPointer,
     _snapshot: Snapshot,
@@ -481,12 +481,12 @@ unsafe extern "C" fn fetch_row_version(
 }
 
 #[pg_guard]
-unsafe extern "C" fn get_latest_tid(_scan: TableScanDesc, _tid: ItemPointer) {
+unsafe extern "C-unwind" fn get_latest_tid(_scan: TableScanDesc, _tid: ItemPointer) {
     log!("TAM: Get latest tid");
 }
 
 #[pg_guard]
-unsafe extern "C" fn tuple_satisfies_snapshot(
+unsafe extern "C-unwind" fn tuple_satisfies_snapshot(
     _rel: Relation,
     _slot: *mut TupleTableSlot,
     _snapshot: Snapshot,
@@ -496,22 +496,26 @@ unsafe extern "C" fn tuple_satisfies_snapshot(
 }
 
 #[pg_guard]
-unsafe extern "C" fn index_delete_tuples(
+unsafe extern "C-unwind" fn index_delete_tuples(
     _rel: Relation,
     _delstate: *mut TM_IndexDeleteOp,
 ) -> TransactionId {
     log!("TAM: Index delete tuple");
-    return 0;
+    return TransactionId::from_inner(0);
 }
 
 #[pg_guard]
-unsafe extern "C" fn relation_nontransactional_truncate(_rel: Relation) {}
+unsafe extern "C-unwind" fn relation_nontransactional_truncate(_rel: Relation) {}
 
 #[pg_guard]
-unsafe extern "C" fn relation_copy_data(_rel: Relation, _newrlocator: *const RelFileLocator) {}
+unsafe extern "C-unwind" fn relation_copy_data(
+    _rel: Relation,
+    _newrlocator: *const RelFileLocator,
+) {
+}
 
 #[pg_guard]
-unsafe extern "C" fn relation_copy_for_cluster(
+unsafe extern "C-unwind" fn relation_copy_for_cluster(
     _new_table: Relation,
     _old_table: Relation,
     _old_index: Relation,
@@ -526,7 +530,7 @@ unsafe extern "C" fn relation_copy_for_cluster(
 }
 
 #[pg_guard]
-unsafe extern "C" fn relation_vacuum(
+unsafe extern "C-unwind" fn relation_vacuum(
     _rel: Relation,
     _params: *mut VacuumParams,
     _bstrategy: BufferAccessStrategy,
@@ -534,7 +538,7 @@ unsafe extern "C" fn relation_vacuum(
 }
 
 #[pg_guard]
-unsafe extern "C" fn scan_analyze_next_block(
+unsafe extern "C-unwind" fn scan_analyze_next_block(
     _scan: TableScanDesc,
     _stream: *mut ReadStream,
 ) -> bool {
@@ -543,7 +547,7 @@ unsafe extern "C" fn scan_analyze_next_block(
 }
 
 #[pg_guard]
-unsafe extern "C" fn scan_analyze_next_tuple(
+unsafe extern "C-unwind" fn scan_analyze_next_tuple(
     _scan: TableScanDesc,
     _oldest_xmin: TransactionId,
     _liverows: *mut f64,
@@ -555,7 +559,7 @@ unsafe extern "C" fn scan_analyze_next_tuple(
 }
 
 #[pg_guard]
-unsafe extern "C" fn index_build_range_scan(
+unsafe extern "C-unwind" fn index_build_range_scan(
     _table_rel: Relation,
     _index_rel: Relation,
     _index_info: *mut IndexInfo,
@@ -572,7 +576,7 @@ unsafe extern "C" fn index_build_range_scan(
 }
 
 #[pg_guard]
-unsafe extern "C" fn index_validate_scan(
+unsafe extern "C-unwind" fn index_validate_scan(
     _table_rel: Relation,
     _index_rel: Relation,
     _index_info: *mut IndexInfo,
@@ -582,13 +586,13 @@ unsafe extern "C" fn index_validate_scan(
 }
 
 #[pg_guard]
-unsafe extern "C" fn relation_needs_toast_table(_rel: Relation) -> bool {
+unsafe extern "C-unwind" fn relation_needs_toast_table(_rel: Relation) -> bool {
     log!("TAM: Needs toast table");
     return false;
 }
 
 #[pg_guard]
-unsafe extern "C" fn scan_sample_next_block(
+unsafe extern "C-unwind" fn scan_sample_next_block(
     _scan: TableScanDesc,
     _scanstate: *mut SampleScanState,
 ) -> bool {
@@ -597,7 +601,7 @@ unsafe extern "C" fn scan_sample_next_block(
 }
 
 #[pg_guard]
-unsafe extern "C" fn scan_sample_next_tuple(
+unsafe extern "C-unwind" fn scan_sample_next_tuple(
     _scan: TableScanDesc,
     _scanstate: *mut SampleScanState,
     _slot: *mut TupleTableSlot,
@@ -607,12 +611,12 @@ unsafe extern "C" fn scan_sample_next_tuple(
 }
 
 #[pg_guard]
-unsafe extern "C" fn parallelscan_estimate(_rel: Relation) -> Size {
+unsafe extern "C-unwind" fn parallelscan_estimate(_rel: Relation) -> Size {
     return 0;
 }
 
 #[pg_guard]
-unsafe extern "C" fn parallelscan_initialize(
+unsafe extern "C-unwind" fn parallelscan_initialize(
     _rel: Relation,
     _pscann: ParallelTableScanDesc,
 ) -> Size {
@@ -620,10 +624,14 @@ unsafe extern "C" fn parallelscan_initialize(
 }
 
 #[pg_guard]
-unsafe extern "C" fn parallelscan_reinitialize(_rel: Relation, _pscan: ParallelTableScanDesc) {}
+unsafe extern "C-unwind" fn parallelscan_reinitialize(
+    _rel: Relation,
+    _pscan: ParallelTableScanDesc,
+) {
+}
 
 #[pg_guard]
-unsafe extern "C" fn tuple_fetch_row_version(
+unsafe extern "C-unwind" fn tuple_fetch_row_version(
     rel: Relation,
     tid: ItemPointer,
     _snapshot: Snapshot,
@@ -655,18 +663,18 @@ unsafe extern "C" fn tuple_fetch_row_version(
 }
 
 #[pg_guard]
-unsafe extern "C" fn tuple_tid_valid(_scan: TableScanDesc, _tidd: ItemPointer) -> bool {
+unsafe extern "C-unwind" fn tuple_tid_valid(_scan: TableScanDesc, _tidd: ItemPointer) -> bool {
     log!("TAM: Tuple tid valid?");
     return true;
 }
 
 #[pg_guard]
-unsafe extern "C" fn tuple_get_latest_tid(_scan: TableScanDesc, _tidd: ItemPointer) {
+unsafe extern "C-unwind" fn tuple_get_latest_tid(_scan: TableScanDesc, _tidd: ItemPointer) {
     log!("TAM: Get latest TID");
 }
 
 #[pg_guard]
-unsafe extern "C" fn relation_set_new_filelocator(
+unsafe extern "C-unwind" fn relation_set_new_filelocator(
     rel: Relation,
     _newrlocator: *const RelFileLocator,
     _persistence: ::core::ffi::c_char,
@@ -681,7 +689,10 @@ unsafe extern "C" fn relation_set_new_filelocator(
 }
 
 #[pg_guard]
-unsafe extern "C" fn relation_size(_rel: Relation, _fork_number: ForkNumber::Type) -> uint64 {
+unsafe extern "C-unwind" fn relation_size(
+    _rel: Relation,
+    _fork_number: ForkNumber::Type,
+) -> uint64 {
     log!("Get relation size");
 
     // let size = database::get_num_rows_in_table(rel);
@@ -691,7 +702,7 @@ unsafe extern "C" fn relation_size(_rel: Relation, _fork_number: ForkNumber::Typ
 }
 
 #[pg_guard]
-unsafe extern "C" fn relation_estimate_size(
+unsafe extern "C-unwind" fn relation_estimate_size(
     rel: Relation,
     _attr_widths: *mut int32,
     _pages: *mut BlockNumber,

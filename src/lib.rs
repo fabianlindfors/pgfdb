@@ -16,7 +16,7 @@ mod transaction;
 mod tuple_cache;
 
 #[pg_guard]
-pub extern "C" fn _PG_init() {
+pub extern "C-unwind" fn _PG_init() {
     env::set_var("RUST_BACKTRACE", "1");
 
     fdb::init();

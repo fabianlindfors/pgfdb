@@ -41,7 +41,7 @@ impl FdbScanDesc {
         let table_subspace = crate::subspace::table(table_oid);
         log!(
             "SCAN: Initalizing scan for table oid={}",
-            table_oid.as_u32()
+            table_oid.to_u32()
         );
 
         let txn = crate::transaction::get_transaction();
