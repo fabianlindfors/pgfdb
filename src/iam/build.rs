@@ -5,7 +5,7 @@ use foundationdb::RangeOption;
 use futures::StreamExt;
 use pg_sys::{Datum, IndexBuildResult, IndexInfo, IndexUniqueCheck, ItemPointer, Relation};
 use pgrx::{
-    pg_sys::{FormData_pg_attribute, Oid},
+    pg_sys::{FormData_pg_attribute, Oid, TupleTableSlot},
     prelude::*,
 };
 use pollster::FutureExt;
@@ -14,48 +14,43 @@ use pollster::FutureExt;
 pub unsafe extern "C-unwind" fn ambuild(
     heap_relation: Relation,
     index_relation: Relation,
-    _index_info: *mut IndexInfo,
+    index_info: *mut IndexInfo,
 ) -> *mut IndexBuildResult {
     log!("IAM: Build index");
 
     let mut num_rows = 0;
-
-    let index_oid = unsafe { (*index_relation).rd_id };
-    let index_tuple_desc = unsafe { (*index_relation).rd_att };
-    let natts = unsafe { (*index_tuple_desc).natts as usize };
-    let attrs = (*index_tuple_desc).attrs.as_slice(natts);
-
-    let table_oid = unsafe { (*heap_relation).rd_id };
+    let index_oid = (*index_relation).rd_id;
+    let table_oid = (*heap_relation).rd_id;
     let table_subspace = crate::subspace::table(table_oid);
 
     let txn = crate::transaction::get_transaction();
     let range_option = RangeOption::from(table_subspace.range());
 
+    // Create a slot for the heap tuple
+    let heap_tuple_desc = (*heap_relation).rd_att;
+    let heap_slot =
+        pgrx::pg_sys::MakeSingleTupleTableSlot(heap_tuple_desc, &pgrx::pg_sys::TTSOpsVirtual);
+
     let mut stream = txn.get_ranges_keyvalues(range_option, false);
     while let Some(item) = stream.next().block_on() {
         let value = item.unwrap_or_pg_error();
         let tuple = crate::coding::Tuple::deserialize(value.value());
+        let id = tuple.id;
 
-        let mut values: Vec<Datum> = Vec::with_capacity(tuple.datums.len());
-        let mut isnull: Vec<bool> = Vec::with_capacity(tuple.datums.len());
-        for (i, maybe_encoded_datum) in tuple.datums.into_iter().enumerate() {
-            if let Some(mut encoded_datum) = maybe_encoded_datum {
-                let datum = crate::coding::decode_datum(&mut encoded_datum, attrs[i].atttypid);
-                values.push(datum);
-                isnull.push(false);
-            } else {
-                values.push(Datum::null());
-                isnull.push(true);
-            }
-        }
+        // Load the tuple into the heap slot
+        tuple.load_into_tts(heap_slot.as_mut().unwrap());
 
-        let key = build_key_from_values(index_oid, tuple.id, natts, attrs, &values, &isnull);
+        // Build and set the index key
+        let key = build_key_from_index_tuple(index_oid, id, index_relation, heap_slot, index_info);
         txn.set(&key, &[]);
 
         num_rows += 1;
     }
 
-    let mut build_result = unsafe { PgBox::<IndexBuildResult>::alloc() };
+    // Free the heap slot
+    pgrx::pg_sys::ExecDropSingleTupleTableSlot(heap_slot);
+
+    let mut build_result = PgBox::<IndexBuildResult>::alloc();
     build_result.heap_tuples = num_rows.into();
     build_result.index_tuples = num_rows.into();
     build_result.into_pg()
@@ -108,6 +103,76 @@ pub unsafe extern "C-unwind" fn aminsert(
     txn.set(&key, &[]);
 
     true
+}
+
+pub fn build_key_from_index_tuple(
+    index_oid: Oid,
+    row_id: u32,
+    index_rel: Relation,
+    heap_slot: *mut TupleTableSlot,
+    index_info: *mut pg_sys::IndexInfo,
+) -> Vec<u8> {
+    let index_subspace = crate::subspace::index(index_oid);
+
+    // Get index tuple descriptor
+    let index_tuple_desc = unsafe { (*index_rel).rd_att };
+    let natts = unsafe { (*index_tuple_desc).natts as usize };
+
+    // Create a new slot for the index tuple
+    let index_slot = unsafe {
+        pgrx::pg_sys::MakeSingleTupleTableSlot(index_tuple_desc, &pgrx::pg_sys::TTSOpsVirtual)
+    };
+
+    // Generate the index tuple values from the heap tuple
+    unsafe {
+        // Create a new estate
+        let estate = pgrx::pg_sys::CreateExecutorState();
+
+        pgrx::pg_sys::FormIndexDatum(
+            index_info,
+            heap_slot,
+            estate,
+            (*index_slot).tts_values,
+            (*index_slot).tts_isnull,
+        );
+
+        // Free the estate
+        pgrx::pg_sys::FreeExecutorState(estate);
+    }
+
+    // Now extract the values from the index slot and create our key
+    let values = unsafe { std::slice::from_raw_parts((*index_slot).tts_values, natts) };
+    let isnull = unsafe { std::slice::from_raw_parts((*index_slot).tts_isnull, natts) };
+    let attrs = unsafe { (*index_tuple_desc).attrs.as_slice(natts) };
+
+    // Prepare tuple elements for the index key
+    let mut key_elements = Vec::with_capacity(natts);
+
+    for i in 0..natts {
+        if isnull[i] {
+            key_elements.push(foundationdb::tuple::Element::Nil);
+        } else {
+            // Get the attribute type OID
+            let attr = attrs[i];
+            let type_oid = attr.atttypid;
+
+            // Get the datum
+            let datum = values[i];
+
+            // Encode the datum using our helper function
+            let element = crate::iam::utils::encode_datum_for_index(datum, type_oid);
+            key_elements.push(element);
+        }
+    }
+
+    // Add the ID to the key elements as the last element
+    key_elements.push(foundationdb::tuple::Element::Int(row_id as i64));
+
+    // Free the slot
+    unsafe { pgrx::pg_sys::ExecDropSingleTupleTableSlot(index_slot) };
+
+    // Create the key using the subspace and key elements
+    index_subspace.pack(&key_elements)
 }
 
 pub fn build_key_from_values(

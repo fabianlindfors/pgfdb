@@ -10,7 +10,7 @@ use pgrx::{
     memcx::current_context,
     name_data_to_str, pg_extern, pg_guard,
     pg_sys::{
-        int32, uint32, uint64, uint8, BlockNumber, BufferAccessStrategy, BulkInsertStateData,
+        self, int32, uint32, uint64, uint8, BlockNumber, BufferAccessStrategy, BulkInsertStateData,
         CommandId, Datum, ForkNumber, IndexBuildCallback, IndexFetchTableData, IndexInfo,
         ItemPointer, LockTupleMode, LockWaitPolicy, MultiXactId, Oid, ParallelTableScanDesc,
         ReadStream, RelFileLocator, Relation, RelationClose, RelationIdGetRelation,
@@ -349,14 +349,21 @@ unsafe extern "C-unwind" fn tuple_delete(
         id,
     );
 
-    // First, fetch the tuple that's being deleted so we can get its values for index deletion
+    // First, fetch the tuple that's being deleted
     let key = subspace::table((*rel).rd_id).pack(&id);
     let txn = crate::transaction::get_transaction();
 
     // Get the tuple data before deleting it
     if let Some(value) = txn.get(&key, false).block_on().unwrap_or_pg_error() {
         // Decode the tuple
-        let mut tuple = crate::coding::Tuple::deserialize(&value);
+        let tuple = crate::coding::Tuple::deserialize(&value);
+
+        // Create a tuple table slot for the heap tuple
+        let tuple_desc = (*rel).rd_att;
+        let heap_slot = pg_sys::MakeSingleTupleTableSlot(tuple_desc, &pg_sys::TTSOpsVirtual);
+
+        // Load the tuple into the slot
+        tuple.load_into_tts(heap_slot.as_mut().unwrap());
 
         // Get all indexes on this relation
         current_context(|ctx| {
@@ -367,51 +374,23 @@ unsafe extern "C-unwind" fn tuple_delete(
                 let index_rel = RelationIdGetRelation(*index_oid);
 
                 if !index_rel.is_null() {
-                    // Get index attributes
-                    let index_tuple_desc = (*index_rel).rd_att;
-                    let natts = (*index_tuple_desc).natts as usize;
-                    let attrs = (*index_tuple_desc).attrs.as_slice(natts);
-
-                    // Extract values from the tuple for the index
-                    // We need to map table columns to index columns
-                    let mut values: Vec<Datum> = Vec::with_capacity(natts);
-                    let mut isnull: Vec<bool> = Vec::with_capacity(natts);
-
-                    // For each index attribute, find the corresponding table column
-                    for i in 0..natts {
-                        let attnum = attrs[i].attnum;
-                        // attnum is 1-based, so we need to subtract 1 to get 0-based index
-                        let table_col_idx = attnum as usize;
-
-                        // Make sure the column index is valid
-                        if table_col_idx < tuple.datums.len() {
-                            if let Some(encoded_datum) = &mut tuple.datums[table_col_idx] {
-                                let datum =
-                                    crate::coding::decode_datum(encoded_datum, attrs[i].atttypid);
-                                values.push(datum);
-                                isnull.push(false);
-                            } else {
-                                values.push(Datum::null());
-                                isnull.push(true);
-                            }
-                        } else {
-                            // This shouldn't happen, but handle it gracefully
-                            values.push(Datum::null());
-                            isnull.push(true);
-                        }
-                    }
+                    // Create index info
+                    let index_info = pg_sys::BuildIndexInfo(index_rel);
 
                     // Build and clear the index key
-                    let key = crate::iam::build::build_key_from_values(
-                        *index_oid, id, natts, attrs, &values, &isnull,
+                    let key = crate::iam::build::build_key_from_index_tuple(
+                        *index_oid, id, index_rel, heap_slot, index_info,
                     );
                     txn.clear(&key);
 
-                    // Release the index relation
+                    // Free index info and index relation
                     RelationClose(index_rel);
                 }
             }
         });
+
+        // Free the heap slot
+        pg_sys::ExecDropSingleTupleTableSlot(heap_slot);
     }
 
     // Now delete the tuple itself

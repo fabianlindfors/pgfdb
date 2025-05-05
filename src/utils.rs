@@ -1,4 +1,7 @@
-fn key_to_plain_text(key: &[u8]) -> String {
+use foundationdb::tuple::{unpack, Element};
+
+#[allow(dead_code)]
+pub fn key_to_plain_text(key: &[u8]) -> String {
     let elements: Vec<Element> = unpack(key).unwrap();
 
     elements

@@ -14,6 +14,7 @@ mod subspace;
 mod tam;
 mod transaction;
 mod tuple_cache;
+mod utils;
 
 #[pg_guard]
 pub extern "C-unwind" fn _PG_init() {
@@ -537,6 +538,32 @@ mod tests {
         Spi::run("INSERT INTO test(id) VALUES (1), (NULL), (NULL), (3)").unwrap();
         let result: Option<i64> =
             Spi::get_one("SELECT count(*) FROM test WHERE id IS NOT NULL").unwrap();
+        assert_eq!(Some(2), result);
+    }
+
+    #[pg_test]
+    fn select_eq_with_index_and_non_indexed_column() {
+        // Create a table with a non-indexed column first, followed by an indexed column
+        // This ensures we don't rely on column numbering between indices and tables
+        Spi::run("CREATE TABLE test (id INTEGER, name TEXT) USING pgfdb").unwrap();
+        Spi::run("INSERT INTO test(id, name) VALUES (1, 'test1'), (2, 'test1'), (3, 'test2')")
+            .unwrap();
+
+        // Create index with existing rows to trigger index build that constructs index keys from table tuples
+        Spi::run("CREATE INDEX name_idx ON test USING pgfdb_idx(name)").unwrap();
+        Spi::run("SET enable_seqscan=0").unwrap();
+
+        // Ensure a select will use our index
+        let explain = Spi::explain("SELECT count(*) FROM test WHERE name = 'test1';").unwrap();
+        assert!(
+            format!("{:?}", explain).contains("Index Name"),
+            "expected query plan to use index: {:?}",
+            explain.0.to_string()
+        );
+
+        // Ensure querying using the index returns the correct results
+        let result: Option<i64> =
+            Spi::get_one("SELECT count(*) FROM test WHERE name = 'test1'").unwrap();
         assert_eq!(Some(2), result);
     }
 
