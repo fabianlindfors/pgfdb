@@ -23,14 +23,12 @@ pg_test = ["foundationdb/fdb-7_3"]
 pgrx = "0.14.1"
 pgrx-sql-entity-graph = "0.14.1"
 foundationdb = "0.9.1"
-tokio = { version = "1", features = ["full"] }
 bytes = "*"
 futures = "*"
 pollster = "0.3.0"
 rand = "*"
 serde = "*"
 serde_cbor = "*"
-serde_json = "*"
 
 [dev-dependencies]
 pgrx-tests = "0.14.1"
