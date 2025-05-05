@@ -360,10 +360,10 @@ unsafe extern "C-unwind" fn tuple_delete(
 
         // Create a tuple table slot for the heap tuple
         let tuple_desc = (*rel).rd_att;
-        let heap_slot = pg_sys::MakeSingleTupleTableSlot(tuple_desc, &pg_sys::TTSOpsVirtual);
+        let table_slot = pg_sys::MakeSingleTupleTableSlot(tuple_desc, &pg_sys::TTSOpsVirtual);
 
         // Load the tuple into the slot
-        tuple.load_into_tts(heap_slot.as_mut().unwrap());
+        tuple.load_into_tts(table_slot.as_mut().unwrap());
 
         // Get all indexes on this relation
         current_context(|ctx| {
@@ -379,7 +379,7 @@ unsafe extern "C-unwind" fn tuple_delete(
 
                     // Build and clear the index key
                     let key = crate::iam::build::build_key_from_table_tuple(
-                        *index_oid, id, index_rel, heap_slot, index_info,
+                        *index_oid, id, index_rel, table_slot, index_info,
                     );
                     txn.clear(&key);
 
@@ -390,7 +390,7 @@ unsafe extern "C-unwind" fn tuple_delete(
         });
 
         // Free the heap slot
-        pg_sys::ExecDropSingleTupleTableSlot(heap_slot);
+        pg_sys::ExecDropSingleTupleTableSlot(table_slot);
     }
 
     // Now delete the tuple itself
