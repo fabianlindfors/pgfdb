@@ -72,7 +72,7 @@ impl FdbScanDesc {
 
     pub fn next_value(self: &mut FdbScanDesc) -> Option<crate::coding::Tuple> {
         let mut next_fut = self.values.next();
-        let mut ctx = Context::from_waker(&Waker::noop());
+        let mut ctx = Context::from_waker(Waker::noop());
         let next = loop {
             match next_fut.poll_unpin(&mut ctx) {
                 Poll::Ready(result) => {
@@ -82,9 +82,7 @@ impl FdbScanDesc {
             }
         };
 
-        let Some(tuple) = next else {
-            return None;
-        };
+        let tuple = next?;
 
         Some(tuple.unwrap_or_pg_error())
     }

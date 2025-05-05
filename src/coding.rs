@@ -36,7 +36,7 @@ impl Tuple {
             // Number of bytes in datum: 8 bytes little endian integer
             // 0 represents null datum
             let Some(datum) = maybe_datum else {
-                let zero = (0 as usize).to_le_bytes();
+                let zero = 0_usize.to_le_bytes();
                 bytes.extend_from_slice(&zero);
                 continue;
             };
@@ -123,8 +123,8 @@ impl Tuple {
         for (i, maybe_encoded_datum) in self.datums.into_iter().enumerate() {
             let Some(mut encoded_datum) = maybe_encoded_datum else {
                 unsafe {
-                    *tts.tts_isnull.offset(i as isize) = true;
-                    *tts.tts_values.offset(i as isize) = Datum::null();
+                    *tts.tts_isnull.add(i) = true;
+                    *tts.tts_values.add(i) = Datum::null();
                 }
                 continue;
             };
@@ -132,8 +132,8 @@ impl Tuple {
             // Decode datum and store it on the TTS
             let datum = decode_datum(&mut encoded_datum, attrs[i].atttypid);
             unsafe {
-                *tts.tts_isnull.offset(i as isize) = false;
-                *tts.tts_values.offset(i as isize) = datum;
+                *tts.tts_isnull.add(i) = false;
+                *tts.tts_values.add(i) = datum;
             }
         }
 
@@ -180,14 +180,12 @@ pub fn decode_datum(encoded_datum: &mut [u8], type_oid: Oid) -> Datum {
         cursor: 0,
     };
 
-    let datum = unsafe {
+    unsafe {
         ReceiveFunctionCall(
             fmgr.as_mut_ptr(),
             ptr::from_mut(&mut string_info),
             io_param.assume_init(),
             -1,
         )
-    };
-
-    return datum;
+    }
 }

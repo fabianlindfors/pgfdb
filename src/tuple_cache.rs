@@ -15,15 +15,13 @@ pub fn get_with_id(id: u32) -> Option<(u32, *mut TupleTableSlot)> {
     #[allow(static_mut_refs)]
     let cache = unsafe { TUPLE_CACHE.borrow() };
 
-    let Some(stored_id) = cache.id else {
-        return None;
-    };
+    let stored_id = cache.id?;
 
     if stored_id != id {
         return None;
     }
 
-    return Some((stored_id, cache.tuple));
+    Some((stored_id, cache.tuple))
 }
 
 pub fn populate(id: u32, tuple: *mut TupleTableSlot) {

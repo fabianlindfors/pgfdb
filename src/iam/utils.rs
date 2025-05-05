@@ -48,7 +48,7 @@ pub fn encode_datum_for_index<'a>(datum: Datum, type_oid: Oid) -> Element<'a> {
         // UUID (OID 2950)
         pg_sys::UUIDOID => {
             let uuid: pgrx::Uuid = unsafe { pgrx::Uuid::from_datum(datum, false).unwrap() };
-            Element::Uuid(Uuid::from_bytes(uuid.as_bytes().clone()))
+            Element::Uuid(Uuid::from_bytes(*uuid.as_bytes()))
         }
         // Add more types as needed
         _ => {

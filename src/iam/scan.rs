@@ -108,7 +108,7 @@ pub unsafe extern "C-unwind" fn amgettuple(
 
     // Get the next key-value pair from the stream
     let mut next_fut = unsafe { (*fdb_scan).values.next() };
-    let mut ctx = Context::from_waker(&Waker::noop());
+    let mut ctx = Context::from_waker(Waker::noop());
 
     // Poll the future until it's ready
     let next = loop {

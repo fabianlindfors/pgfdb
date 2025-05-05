@@ -189,7 +189,7 @@ unsafe extern "C-unwind" fn scan_get_next_slot(
     // Store the decoded values on the TTS
     tuple.load_into_tts(slot.as_mut().unwrap());
 
-    return true;
+    true
 }
 
 #[pg_guard]
@@ -208,7 +208,7 @@ unsafe extern "C-unwind" fn scan_get_next_slot_tidrange(
     _slot: *mut TupleTableSlot,
 ) -> bool {
     log!("TAM: Scan get next slot TID range");
-    return false;
+    false
 }
 
 #[pg_guard]
@@ -262,7 +262,7 @@ unsafe extern "C-unwind" fn index_fetch_tuple(
     // Store the decoded values on the TTS
     tuple.load_into_tts(slot.as_mut().unwrap());
 
-    return true;
+    true
 }
 
 #[pg_guard]
@@ -398,7 +398,7 @@ unsafe extern "C-unwind" fn tuple_delete(
 
     // For some reason this is not counting correctly how many tuples have been removed
     // The response after running a delete is always "DELETE 0"
-    return TM_Result::TM_Deleted;
+    TM_Result::TM_Deleted
 }
 
 #[pg_guard]
@@ -429,7 +429,7 @@ unsafe extern "C-unwind" fn tuple_update(
 
     *update_indexes = TU_UpdateIndexes::TU_All;
 
-    return TM_Result::TM_Ok;
+    TM_Result::TM_Ok
 }
 
 #[pg_guard]
@@ -445,7 +445,7 @@ unsafe extern "C-unwind" fn tuple_lock(
     _tmfd: *mut TM_FailureData,
 ) -> TM_Result::Type {
     log!("TAM: Lock tuple");
-    return TM_Result::TM_Ok;
+    TM_Result::TM_Ok
 }
 
 #[pg_guard]
@@ -456,7 +456,7 @@ unsafe extern "C-unwind" fn fetch_row_version(
     _slot: *mut TupleTableSlot,
 ) -> bool {
     log!("TAM: Fetch row version");
-    return false;
+    false
 }
 
 #[pg_guard]
@@ -471,7 +471,7 @@ unsafe extern "C-unwind" fn tuple_satisfies_snapshot(
     _snapshot: Snapshot,
 ) -> bool {
     log!("TAM: Tuple satisfies snapshot");
-    return false;
+    false
 }
 
 #[pg_guard]
@@ -480,7 +480,7 @@ unsafe extern "C-unwind" fn index_delete_tuples(
     _delstate: *mut TM_IndexDeleteOp,
 ) -> TransactionId {
     log!("TAM: Index delete tuple");
-    return TransactionId::from_inner(0);
+    TransactionId::from_inner(0)
 }
 
 #[pg_guard]
@@ -522,7 +522,7 @@ unsafe extern "C-unwind" fn scan_analyze_next_block(
     _stream: *mut ReadStream,
 ) -> bool {
     log!("Scan analyze next block");
-    return false;
+    false
 }
 
 #[pg_guard]
@@ -534,7 +534,7 @@ unsafe extern "C-unwind" fn scan_analyze_next_tuple(
     _slot: *mut TupleTableSlot,
 ) -> bool {
     log!("Scan analyze next tuple");
-    return false;
+    false
 }
 
 #[pg_guard]
@@ -551,7 +551,7 @@ unsafe extern "C-unwind" fn index_build_range_scan(
     _callback_state: *mut ::std::os::raw::c_void,
     _scan: TableScanDesc,
 ) -> f64 {
-    return 0.0;
+    0.0
 }
 
 #[pg_guard]
@@ -567,7 +567,7 @@ unsafe extern "C-unwind" fn index_validate_scan(
 #[pg_guard]
 unsafe extern "C-unwind" fn relation_needs_toast_table(_rel: Relation) -> bool {
     log!("TAM: Needs toast table");
-    return false;
+    false
 }
 
 #[pg_guard]
@@ -576,7 +576,7 @@ unsafe extern "C-unwind" fn scan_sample_next_block(
     _scanstate: *mut SampleScanState,
 ) -> bool {
     log!("TAM: Scan sample next block");
-    return false;
+    false
 }
 
 #[pg_guard]
@@ -586,12 +586,12 @@ unsafe extern "C-unwind" fn scan_sample_next_tuple(
     _slot: *mut TupleTableSlot,
 ) -> bool {
     log!("TAM: Scan sample next tuple");
-    return false;
+    false
 }
 
 #[pg_guard]
 unsafe extern "C-unwind" fn parallelscan_estimate(_rel: Relation) -> Size {
-    return 0;
+    0
 }
 
 #[pg_guard]
@@ -599,7 +599,7 @@ unsafe extern "C-unwind" fn parallelscan_initialize(
     _rel: Relation,
     _pscann: ParallelTableScanDesc,
 ) -> Size {
-    return 0;
+    0
 }
 
 #[pg_guard]
@@ -638,13 +638,13 @@ unsafe extern "C-unwind" fn tuple_fetch_row_version(
 
     crate::tuple_cache::populate(id, slot);
 
-    return true;
+    true
 }
 
 #[pg_guard]
 unsafe extern "C-unwind" fn tuple_tid_valid(_scan: TableScanDesc, _tidd: ItemPointer) -> bool {
     log!("TAM: Tuple tid valid?");
-    return true;
+    true
 }
 
 #[pg_guard]

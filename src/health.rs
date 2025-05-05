@@ -15,7 +15,7 @@ fn fdb_is_healthy() -> bool {
 
     txn.get_read_version().block_on().unwrap_or_pg_error();
 
-    return true;
+    true
 }
 
 #[cfg(any(test, feature = "pg_test"))]
