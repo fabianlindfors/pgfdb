@@ -41,7 +41,7 @@ pub unsafe extern "C-unwind" fn ambuild(
         tuple.load_into_tts(heap_slot.as_mut().unwrap());
 
         // Build and set the index key
-        let key = build_key_from_index_tuple(index_oid, id, index_relation, heap_slot, index_info);
+        let key = build_key_from_table_tuple(index_oid, id, index_relation, heap_slot, index_info);
         txn.set(&key, &[]);
 
         num_rows += 1;
@@ -91,7 +91,8 @@ pub unsafe extern "C-unwind" fn aminsert(
         let old_values = from_raw_parts_mut((*existing_slot).tts_values, natts);
         let old_isnull = from_raw_parts_mut((*existing_slot).tts_isnull, natts);
 
-        let key = build_key_from_values(index_oid, id, natts, attrs, &old_values, &old_isnull);
+        let key =
+            build_key_from_index_values(index_oid, id, natts, attrs, &old_values, &old_isnull);
         txn.clear(&key);
     }
 
@@ -99,21 +100,19 @@ pub unsafe extern "C-unwind" fn aminsert(
     let values = from_raw_parts_mut(raw_values, natts);
     let isnull = from_raw_parts_mut(raw_isnull, natts);
 
-    let key = build_key_from_values(index_oid, id, natts, attrs, values, isnull);
+    let key = build_key_from_index_values(index_oid, id, natts, attrs, values, isnull);
     txn.set(&key, &[]);
 
     true
 }
 
-pub fn build_key_from_index_tuple(
+pub fn build_key_from_table_tuple(
     index_oid: Oid,
     row_id: u32,
     index_rel: Relation,
-    heap_slot: *mut TupleTableSlot,
+    table_slot: *mut TupleTableSlot,
     index_info: *mut pg_sys::IndexInfo,
 ) -> Vec<u8> {
-    let index_subspace = crate::subspace::index(index_oid);
-
     // Get index tuple descriptor
     let index_tuple_desc = unsafe { (*index_rel).rd_att };
     let natts = unsafe { (*index_tuple_desc).natts as usize };
@@ -130,7 +129,7 @@ pub fn build_key_from_index_tuple(
 
         pgrx::pg_sys::FormIndexDatum(
             index_info,
-            heap_slot,
+            table_slot,
             estate,
             (*index_slot).tts_values,
             (*index_slot).tts_isnull,
@@ -145,37 +144,15 @@ pub fn build_key_from_index_tuple(
     let isnull = unsafe { std::slice::from_raw_parts((*index_slot).tts_isnull, natts) };
     let attrs = unsafe { (*index_tuple_desc).attrs.as_slice(natts) };
 
-    // Prepare tuple elements for the index key
-    let mut key_elements = Vec::with_capacity(natts);
-
-    for i in 0..natts {
-        if isnull[i] {
-            key_elements.push(foundationdb::tuple::Element::Nil);
-        } else {
-            // Get the attribute type OID
-            let attr = attrs[i];
-            let type_oid = attr.atttypid;
-
-            // Get the datum
-            let datum = values[i];
-
-            // Encode the datum using our helper function
-            let element = crate::iam::utils::encode_datum_for_index(datum, type_oid);
-            key_elements.push(element);
-        }
-    }
-
-    // Add the ID to the key elements as the last element
-    key_elements.push(foundationdb::tuple::Element::Int(row_id as i64));
+    let index_key = build_key_from_index_values(index_oid, row_id, natts, attrs, values, isnull);
 
     // Free the slot
     unsafe { pgrx::pg_sys::ExecDropSingleTupleTableSlot(index_slot) };
 
-    // Create the key using the subspace and key elements
-    index_subspace.pack(&key_elements)
+    index_key
 }
 
-pub fn build_key_from_values(
+pub fn build_key_from_index_values(
     index_oid: Oid,
     id: u32,
     natts: usize,

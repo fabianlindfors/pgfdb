@@ -378,7 +378,7 @@ unsafe extern "C-unwind" fn tuple_delete(
                     let index_info = pg_sys::BuildIndexInfo(index_rel);
 
                     // Build and clear the index key
-                    let key = crate::iam::build::build_key_from_index_tuple(
+                    let key = crate::iam::build::build_key_from_table_tuple(
                         *index_oid, id, index_rel, heap_slot, index_info,
                     );
                     txn.clear(&key);
