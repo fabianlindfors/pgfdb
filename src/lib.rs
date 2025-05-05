@@ -158,6 +158,33 @@ mod tests {
     }
 
     #[pg_test]
+    fn update_with_index() {
+        Spi::run("CREATE TABLE test (id INTEGER, name TEXT) USING pgfdb").unwrap();
+        Spi::run("CREATE INDEX name_idx ON test USING pgfdb_idx(name)").unwrap();
+
+        Spi::run("INSERT INTO test(id, name) VALUES (1, 'Test Person')").unwrap();
+        Spi::run("UPDATE test SET name = 'Another Test Person' WHERE name = 'Test Person'")
+            .unwrap();
+
+        Spi::run("SET enable_seqscan=0").unwrap();
+        let explain = Spi::explain(&format!(
+            "SELECT count(*) FROM test WHERE name = 'Another Test Person'"
+        ))
+        .unwrap();
+        assert!(
+            format!("{:?}", explain).contains("Index Name"),
+            "expected query plan to use index: {:?}",
+            explain.0.to_string()
+        );
+
+        let result: Option<i64> = Spi::get_one(&format!(
+            "SELECT count(*) FROM test WHERE name = 'Another Test Person'"
+        ))
+        .unwrap();
+        assert_eq!(Some(1), result);
+    }
+
+    #[pg_test]
     fn delete_with_index() {
         Spi::run("CREATE TABLE test (id INTEGER, name TEXT) USING pgfdb").unwrap();
         Spi::run("CREATE INDEX name_idx ON test USING pgfdb_idx(name)").unwrap();

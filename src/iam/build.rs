@@ -85,14 +85,13 @@ pub unsafe extern "C-unwind" fn aminsert(
     let txn = crate::transaction::get_transaction();
 
     // If this was an update, we need to clear any existing index key
-    // TODO: Using TUPLE_CACHE here seems like it might go wrong if we are not in an update
-    // (although doing extra key clearing should still be correct)
+    // We directly use build_key_from_table_tuple like in tuple_delete
+    // TODO: It might be dangerous to rely on the tuple cache here
     if let Some((_, existing_slot)) = crate::tuple_cache::get_with_id(id) {
-        let old_values = from_raw_parts_mut((*existing_slot).tts_values, natts);
-        let old_isnull = from_raw_parts_mut((*existing_slot).tts_isnull, natts);
-
+        // Build and clear the index key using existing slot
+        let index_info = pg_sys::BuildIndexInfo(index_relation);
         let key =
-            build_key_from_index_values(index_oid, id, natts, attrs, &old_values, &old_isnull);
+            build_key_from_table_tuple(index_oid, id, index_relation, existing_slot, index_info);
         txn.clear(&key);
     }
 
