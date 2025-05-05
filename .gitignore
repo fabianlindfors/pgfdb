@@ -6,3 +6,5 @@
 Cargo.lock
 .aider*
 .env
+
+**/.claude/settings.local.json
