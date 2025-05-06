@@ -1,6 +1,6 @@
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="https://github.com/fabianlindfors/pgfdb-internal/blob/9be9403f6ca58ec24aee9826b5fd7d484922796e/assets/elephants-dark.png">
-  <img alt="pgfdb" src="https://github.com/fabianlindfors/pgfdb-internal/blob/9be9403f6ca58ec24aee9826b5fd7d484922796e/assets/elephants.png" width="150" align="right">
+  <source media="(prefers-color-scheme: dark)" srcset="/assets/elephants-dark.png">
+  <img alt="pgfdb" src="/assets/elephants.png" width="150">
 </picture>
 
 # pgfdb
