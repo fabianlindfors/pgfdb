@@ -1,6 +1,6 @@
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="/assets/elephants-dark.png">
-  <img alt="pgfdb" src="/assets/elephants.png" width="150">
+  <source media="(prefers-color-scheme: dark)" srcset="/assets/elephants.png">
+  <img alt="pgfdb" src="/assets/elephants-dark.png" width="150">
 </picture>
 
 # pgfdb
