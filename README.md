@@ -162,4 +162,4 @@ pgfdb is an experimental project and is not ready for production usage. It's lik
 
 ## License
 
-pgfdb is currently closed source and only distributed as a Docker image for evaluation. Depending on how the project goes, it might be open sourced in the future although that remains to be seen. If you have any thoughts on this, [get in touch](mailto:fabian@flapplabs.se)!
+pgfdb is licensed under [AGPLv3](LICENSE.md)
