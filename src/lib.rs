@@ -37,19 +37,19 @@ mod tests {
 
     #[pg_test]
     fn create_table() {
-        Spi::run("CREATE TABLE test (id INTEGER) USING pgfdb").unwrap();
+        Spi::run("CREATE TABLE test (id INTEGER) USING pgfdb_table").unwrap();
     }
 
     #[pg_test]
     fn insert() {
-        Spi::run("CREATE TABLE test (id INTEGER) USING pgfdb").unwrap();
+        Spi::run("CREATE TABLE test (id INTEGER) USING pgfdb_table").unwrap();
 
         Spi::run("INSERT INTO test (id) VALUES (10)").unwrap();
     }
 
     #[pg_test]
     fn update() {
-        Spi::run("CREATE TABLE test (id INTEGER) USING pgfdb").unwrap();
+        Spi::run("CREATE TABLE test (id INTEGER) USING pgfdb_table").unwrap();
         Spi::run("INSERT INTO test (id) VALUES (10), (11), (12)").unwrap();
 
         Spi::run("UPDATE test SET id = 12 WHERE id = 10").unwrap();
@@ -62,7 +62,7 @@ mod tests {
 
     #[pg_test]
     fn delete() {
-        Spi::run("CREATE TABLE test (id INTEGER) USING pgfdb").unwrap();
+        Spi::run("CREATE TABLE test (id INTEGER) USING pgfdb_table").unwrap();
         Spi::run("INSERT INTO test (id) VALUES (1), (2), (2), (3)").unwrap();
 
         let initial_count: i64 = Spi::get_one("SELECT count(*) FROM test WHERE id = 2")
@@ -82,7 +82,7 @@ mod tests {
 
     #[pg_test]
     fn select() {
-        Spi::run("CREATE TABLE test (id INTEGER, uuid UUID) USING pgfdb").unwrap();
+        Spi::run("CREATE TABLE test (id INTEGER, uuid UUID) USING pgfdb_table").unwrap();
 
         Spi::run(
             "INSERT INTO test (id, uuid) VALUES (1, gen_random_uuid()), (2, gen_random_uuid())",
@@ -97,7 +97,7 @@ mod tests {
 
     #[pg_test]
     fn aggregates() {
-        Spi::run("CREATE TABLE test (id INTEGER) USING pgfdb").unwrap();
+        Spi::run("CREATE TABLE test (id INTEGER) USING pgfdb_table").unwrap();
 
         Spi::run("INSERT INTO test (id) VALUES (1), (2), (3), (4)").unwrap();
 
@@ -110,7 +110,7 @@ mod tests {
     #[pg_test]
     fn select_with_heap_index() {
         // Create table with a primary key index (will be a regular Postgres index)
-        Spi::run("CREATE TABLE test (id INTEGER PRIMARY KEY) USING pgfdb").unwrap();
+        Spi::run("CREATE TABLE test (id INTEGER PRIMARY KEY) USING pgfdb_table").unwrap();
         Spi::run("INSERT INTO test (id) VALUES (1), (2), (3), (4)").unwrap();
 
         // Disable sequential scans to force index use
@@ -124,16 +124,16 @@ mod tests {
 
     #[pg_test]
     fn create_index() {
-        Spi::run("CREATE TABLE test (id INTEGER) USING pgfdb").unwrap();
-        Spi::run("CREATE INDEX id_idx ON test USING pgfdb_idx(id)").unwrap();
+        Spi::run("CREATE TABLE test (id INTEGER) USING pgfdb_table").unwrap();
+        Spi::run("CREATE INDEX id_idx ON test USING pgfdb(id)").unwrap();
     }
 
     #[pg_test]
     fn create_index_with_existing_rows() {
-        Spi::run("CREATE TABLE test (id INTEGER) USING pgfdb").unwrap();
+        Spi::run("CREATE TABLE test (id INTEGER) USING pgfdb_table").unwrap();
         Spi::run("INSERT INTO test(id) VALUES (1), (2), (3)").unwrap();
 
-        Spi::run("CREATE INDEX id_idx ON test USING pgfdb_idx(id)").unwrap();
+        Spi::run("CREATE INDEX id_idx ON test USING pgfdb(id)").unwrap();
 
         // Ensure the select will use our index
         Spi::run("SET enable_seqscan=0").unwrap();
@@ -152,15 +152,15 @@ mod tests {
 
     #[pg_test]
     fn insert_with_index() {
-        Spi::run("CREATE TABLE test (id INTEGER) USING pgfdb").unwrap();
-        Spi::run("CREATE INDEX id_idx ON test USING pgfdb_idx(id)").unwrap();
+        Spi::run("CREATE TABLE test (id INTEGER) USING pgfdb_table").unwrap();
+        Spi::run("CREATE INDEX id_idx ON test USING pgfdb(id)").unwrap();
         Spi::run("INSERT INTO test(id) VALUES (1)").unwrap();
     }
 
     #[pg_test]
     fn update_with_index() {
-        Spi::run("CREATE TABLE test (id INTEGER, name TEXT) USING pgfdb").unwrap();
-        Spi::run("CREATE INDEX name_idx ON test USING pgfdb_idx(name)").unwrap();
+        Spi::run("CREATE TABLE test (id INTEGER, name TEXT) USING pgfdb_table").unwrap();
+        Spi::run("CREATE INDEX name_idx ON test USING pgfdb(name)").unwrap();
 
         Spi::run("INSERT INTO test(id, name) VALUES (1, 'Test Person')").unwrap();
         Spi::run("UPDATE test SET name = 'Another Test Person' WHERE name = 'Test Person'")
@@ -186,8 +186,8 @@ mod tests {
 
     #[pg_test]
     fn delete_with_index() {
-        Spi::run("CREATE TABLE test (id INTEGER, name TEXT) USING pgfdb").unwrap();
-        Spi::run("CREATE INDEX name_idx ON test USING pgfdb_idx(name)").unwrap();
+        Spi::run("CREATE TABLE test (id INTEGER, name TEXT) USING pgfdb_table").unwrap();
+        Spi::run("CREATE INDEX name_idx ON test USING pgfdb(name)").unwrap();
 
         Spi::run("INSERT INTO test(id, name) VALUES (1, 'Test Person')").unwrap();
         Spi::run("DELETE FROM test WHERE name = 'Test Person'").unwrap();
@@ -236,11 +236,11 @@ mod tests {
             let table = format!("test_{}", column_type.to_lowercase());
 
             Spi::run(&format!(
-                "CREATE TABLE {table} (id {column_type}) USING pgfdb"
+                "CREATE TABLE {table} (id {column_type}) USING pgfdb_table"
             ))
             .unwrap();
             Spi::run(&format!(
-                "CREATE INDEX {table}_id_idx ON {table} USING pgfdb_idx(id)"
+                "CREATE INDEX {table}_id_idx ON {table} USING pgfdb(id)"
             ))
             .unwrap();
 
@@ -285,11 +285,11 @@ mod tests {
             let table = format!("test_{}", column_type.to_lowercase());
 
             Spi::run(&format!(
-                "CREATE TABLE {table} (id {column_type}) USING pgfdb"
+                "CREATE TABLE {table} (id {column_type}) USING pgfdb_table"
             ))
             .unwrap();
             Spi::run(&format!(
-                "CREATE INDEX {table}_id_idx ON {table} USING pgfdb_idx(id)"
+                "CREATE INDEX {table}_id_idx ON {table} USING pgfdb(id)"
             ))
             .unwrap();
 
@@ -332,11 +332,11 @@ mod tests {
             let table = format!("test_{}", column_type.to_lowercase());
 
             Spi::run(&format!(
-                "CREATE TABLE {table} (id {column_type}) USING pgfdb"
+                "CREATE TABLE {table} (id {column_type}) USING pgfdb_table"
             ))
             .unwrap();
             Spi::run(&format!(
-                "CREATE INDEX {table}_id_idx ON {table} USING pgfdb_idx(id)"
+                "CREATE INDEX {table}_id_idx ON {table} USING pgfdb(id)"
             ))
             .unwrap();
 
@@ -379,11 +379,11 @@ mod tests {
             let table = format!("test_{}", column_type.to_lowercase());
 
             Spi::run(&format!(
-                "CREATE TABLE {table} (id {column_type}) USING pgfdb"
+                "CREATE TABLE {table} (id {column_type}) USING pgfdb_table"
             ))
             .unwrap();
             Spi::run(&format!(
-                "CREATE INDEX {table}_id_idx ON {table} USING pgfdb_idx(id)"
+                "CREATE INDEX {table}_id_idx ON {table} USING pgfdb(id)"
             ))
             .unwrap();
 
@@ -426,11 +426,11 @@ mod tests {
             let table = format!("test_{}", column_type.to_lowercase());
 
             Spi::run(&format!(
-                "CREATE TABLE {table} (id {column_type}) USING pgfdb"
+                "CREATE TABLE {table} (id {column_type}) USING pgfdb_table"
             ))
             .unwrap();
             Spi::run(&format!(
-                "CREATE INDEX {table}_id_idx ON {table} USING pgfdb_idx(id)"
+                "CREATE INDEX {table}_id_idx ON {table} USING pgfdb(id)"
             ))
             .unwrap();
 
@@ -473,11 +473,11 @@ mod tests {
             let table = format!("test_{}", column_type.to_lowercase());
 
             Spi::run(&format!(
-                "CREATE TABLE {table} (id {column_type}) USING pgfdb"
+                "CREATE TABLE {table} (id {column_type}) USING pgfdb_table"
             ))
             .unwrap();
             Spi::run(&format!(
-                "CREATE INDEX {table}_id_idx ON {table} USING pgfdb_idx(id)"
+                "CREATE INDEX {table}_id_idx ON {table} USING pgfdb(id)"
             ))
             .unwrap();
 
@@ -508,8 +508,8 @@ mod tests {
 
     #[pg_test]
     fn select_lt_on_nulls_with_index() {
-        Spi::run("CREATE TABLE test (id INTEGER) USING pgfdb").unwrap();
-        Spi::run("CREATE INDEX id_idx ON test USING pgfdb_idx(id)").unwrap();
+        Spi::run("CREATE TABLE test (id INTEGER) USING pgfdb_table").unwrap();
+        Spi::run("CREATE INDEX id_idx ON test USING pgfdb(id)").unwrap();
 
         // Ensure the select will use our index
         Spi::run("SET enable_seqscan=0").unwrap();
@@ -528,8 +528,8 @@ mod tests {
 
     #[pg_test]
     fn select_null_with_index() {
-        Spi::run("CREATE TABLE test (id INTEGER) USING pgfdb").unwrap();
-        Spi::run("CREATE INDEX id_idx ON test USING pgfdb_idx(id)").unwrap();
+        Spi::run("CREATE TABLE test (id INTEGER) USING pgfdb_table").unwrap();
+        Spi::run("CREATE INDEX id_idx ON test USING pgfdb(id)").unwrap();
 
         // Ensure the select will use our index
         Spi::run("SET enable_seqscan=0").unwrap();
@@ -549,8 +549,8 @@ mod tests {
 
     #[pg_test]
     fn select_not_null_with_index() {
-        Spi::run("CREATE TABLE test (id INTEGER) USING pgfdb").unwrap();
-        Spi::run("CREATE INDEX id_idx ON test USING pgfdb_idx(id)").unwrap();
+        Spi::run("CREATE TABLE test (id INTEGER) USING pgfdb_table").unwrap();
+        Spi::run("CREATE INDEX id_idx ON test USING pgfdb(id)").unwrap();
 
         // Ensure the select will use our index
         Spi::run("SET enable_seqscan=0").unwrap();
@@ -572,12 +572,12 @@ mod tests {
     fn select_eq_with_index_and_non_indexed_column() {
         // Create a table with a non-indexed column first, followed by an indexed column
         // This ensures we don't rely on column numbering between indices and tables
-        Spi::run("CREATE TABLE test (id INTEGER, name TEXT) USING pgfdb").unwrap();
+        Spi::run("CREATE TABLE test (id INTEGER, name TEXT) USING pgfdb_table").unwrap();
         Spi::run("INSERT INTO test(id, name) VALUES (1, 'test1'), (2, 'test1'), (3, 'test2')")
             .unwrap();
 
         // Create index with existing rows to trigger index build that constructs index keys from table tuples
-        Spi::run("CREATE INDEX name_idx ON test USING pgfdb_idx(name)").unwrap();
+        Spi::run("CREATE INDEX name_idx ON test USING pgfdb(name)").unwrap();
         Spi::run("SET enable_seqscan=0").unwrap();
 
         // Ensure a select will use our index
@@ -596,8 +596,8 @@ mod tests {
 
     #[pg_test]
     fn select_eq_with_multi_column_index() {
-        Spi::run("CREATE TABLE test (id1 INTEGER, id2 INTEGER) USING pgfdb").unwrap();
-        Spi::run("CREATE INDEX id_idx ON test USING pgfdb_idx(id1, id2)").unwrap();
+        Spi::run("CREATE TABLE test (id1 INTEGER, id2 INTEGER) USING pgfdb_table").unwrap();
+        Spi::run("CREATE INDEX id_idx ON test USING pgfdb(id1, id2)").unwrap();
         Spi::run("SET enable_seqscan=0").unwrap();
 
         // Ensure a select on the initial column will use our index
@@ -646,9 +646,12 @@ mod tests {
     #[pg_test]
     fn join_with_table_scans() {
         // Create two tables with pgfdb storage
-        Spi::run("CREATE TABLE orders (id INTEGER PRIMARY KEY, customer_id INTEGER) USING pgfdb")
+        Spi::run(
+            "CREATE TABLE orders (id INTEGER PRIMARY KEY, customer_id INTEGER) USING pgfdb_table",
+        )
+        .unwrap();
+        Spi::run("CREATE TABLE customers (id INTEGER PRIMARY KEY, name TEXT) USING pgfdb_table")
             .unwrap();
-        Spi::run("CREATE TABLE customers (id INTEGER PRIMARY KEY, name TEXT) USING pgfdb").unwrap();
 
         // Insert test data
         Spi::run(
@@ -699,11 +702,13 @@ mod tests {
     #[pg_test]
     fn join_with_indexed_column() {
         // Create tables and add an index on the join column
-        Spi::run("CREATE TABLE products (id INTEGER PRIMARY KEY, category_id INTEGER) USING pgfdb")
+        Spi::run(
+            "CREATE TABLE products (id INTEGER PRIMARY KEY, category_id INTEGER) USING pgfdb_table",
+        )
+        .unwrap();
+        Spi::run("CREATE TABLE categories (id INTEGER PRIMARY KEY, name TEXT) USING pgfdb_table")
             .unwrap();
-        Spi::run("CREATE TABLE categories (id INTEGER PRIMARY KEY, name TEXT) USING pgfdb")
-            .unwrap();
-        Spi::run("CREATE INDEX products_category_idx ON products USING pgfdb_idx(category_id)")
+        Spi::run("CREATE INDEX products_category_idx ON products USING pgfdb(category_id)")
             .unwrap();
 
         // Insert test data
@@ -744,9 +749,11 @@ mod tests {
 
     #[pg_test]
     fn join_with_multiple_conditions() {
-        Spi::run("CREATE TABLE employees (id INTEGER PRIMARY KEY, dept_id INTEGER, manager_id INTEGER) USING pgfdb").unwrap();
-        Spi::run("CREATE TABLE departments (id INTEGER PRIMARY KEY, location TEXT) USING pgfdb")
-            .unwrap();
+        Spi::run("CREATE TABLE employees (id INTEGER PRIMARY KEY, dept_id INTEGER, manager_id INTEGER) USING pgfdb_table").unwrap();
+        Spi::run(
+            "CREATE TABLE departments (id INTEGER PRIMARY KEY, location TEXT) USING pgfdb_table",
+        )
+        .unwrap();
 
         Spi::run("INSERT INTO departments (id, location) VALUES (1, 'New York'), (2, 'Boston'), (3, 'San Francisco')").unwrap();
         Spi::run(
@@ -788,8 +795,8 @@ mod tests {
         }
 
         // Add indices and run test cases with them
-        Spi::run("CREATE INDEX emp_dept_idx ON employees USING pgfdb_idx(dept_id)").unwrap();
-        Spi::run("CREATE INDEX emp_manager_idx ON employees USING pgfdb_idx(manager_id)").unwrap();
+        Spi::run("CREATE INDEX emp_dept_idx ON employees USING pgfdb(dept_id)").unwrap();
+        Spi::run("CREATE INDEX emp_manager_idx ON employees USING pgfdb(manager_id)").unwrap();
 
         // Disable sequential scans to force index use
         Spi::run("SET enable_seqscan=0").unwrap();

@@ -18,16 +18,16 @@ use std::ptr;
     LANGUAGE C STRICT;
 
     -- Create the corresponding index access method from the just-registered IAM handler
-    CREATE ACCESS METHOD pgfdb_idx TYPE INDEX HANDLER pgfdb_iam_handler;
+    CREATE ACCESS METHOD pgfdb TYPE INDEX HANDLER pgfdb_iam_handler;
 
     -- Create operator families for related data types
-    CREATE OPERATOR FAMILY pgfdb_integer_ops USING pgfdb_idx;
-    CREATE OPERATOR FAMILY pgfdb_text_ops USING pgfdb_idx;
-    CREATE OPERATOR FAMILY pgfdb_float_ops USING pgfdb_idx;
+    CREATE OPERATOR FAMILY pgfdb_integer_ops USING pgfdb;
+    CREATE OPERATOR FAMILY pgfdb_text_ops USING pgfdb;
+    CREATE OPERATOR FAMILY pgfdb_float_ops USING pgfdb;
 
     -- Operator classes for integer types
-    CREATE OPERATOR CLASS pgfdb_idx_integer 
-    DEFAULT FOR TYPE INTEGER USING pgfdb_idx 
+    CREATE OPERATOR CLASS pgfdb_integer
+    DEFAULT FOR TYPE INTEGER USING pgfdb
     FAMILY pgfdb_integer_ops AS
     OPERATOR 1 < (INTEGER, INTEGER),
     OPERATOR 2 <= (INTEGER, INTEGER),
@@ -35,9 +35,9 @@ use std::ptr;
     OPERATOR 4 >= (INTEGER, INTEGER),
     OPERATOR 5 > (INTEGER, INTEGER),
     OPERATOR 6 != (INTEGER, INTEGER);
-    
-    CREATE OPERATOR CLASS pgfdb_idx_bigint
-    DEFAULT FOR TYPE BIGINT USING pgfdb_idx 
+
+    CREATE OPERATOR CLASS pgfdb_bigint
+    DEFAULT FOR TYPE BIGINT USING pgfdb
     FAMILY pgfdb_integer_ops AS
     OPERATOR 1 < (BIGINT, BIGINT),
     OPERATOR 2 <= (BIGINT, BIGINT),
@@ -45,9 +45,9 @@ use std::ptr;
     OPERATOR 4 >= (BIGINT, BIGINT),
     OPERATOR 5 > (BIGINT, BIGINT),
     OPERATOR 6 != (BIGINT, BIGINT);
-    
-    CREATE OPERATOR CLASS pgfdb_idx_smallint
-    DEFAULT FOR TYPE SMALLINT USING pgfdb_idx 
+
+    CREATE OPERATOR CLASS pgfdb_smallint
+    DEFAULT FOR TYPE SMALLINT USING pgfdb
     FAMILY pgfdb_integer_ops AS
     OPERATOR 1 < (SMALLINT, SMALLINT),
     OPERATOR 2 <= (SMALLINT, SMALLINT),
@@ -55,17 +55,17 @@ use std::ptr;
     OPERATOR 4 >= (SMALLINT, SMALLINT),
     OPERATOR 5 > (SMALLINT, SMALLINT),
     OPERATOR 6 != (SMALLINT, SMALLINT);
-    
+
     -- Operator class for text type
-    CREATE OPERATOR CLASS pgfdb_idx_text
-    DEFAULT FOR TYPE TEXT USING pgfdb_idx 
+    CREATE OPERATOR CLASS pgfdb_text
+    DEFAULT FOR TYPE TEXT USING pgfdb
     FAMILY pgfdb_text_ops AS
     OPERATOR 3 = (TEXT, TEXT),
     OPERATOR 6 != (TEXT, TEXT);
-    
+
     -- Operator classes for floating point types
-    CREATE OPERATOR CLASS pgfdb_idx_real
-    DEFAULT FOR TYPE REAL USING pgfdb_idx 
+    CREATE OPERATOR CLASS pgfdb_real
+    DEFAULT FOR TYPE REAL USING pgfdb
     FAMILY pgfdb_float_ops AS
     OPERATOR 1 < (REAL, REAL),
     OPERATOR 2 <= (REAL, REAL),
@@ -73,9 +73,9 @@ use std::ptr;
     OPERATOR 4 >= (REAL, REAL),
     OPERATOR 5 > (REAL, REAL),
     OPERATOR 6 != (REAL, REAL);
-    
-    CREATE OPERATOR CLASS pgfdb_idx_double_precision
-    DEFAULT FOR TYPE DOUBLE PRECISION USING pgfdb_idx 
+
+    CREATE OPERATOR CLASS pgfdb_double_precision
+    DEFAULT FOR TYPE DOUBLE PRECISION USING pgfdb
     FAMILY pgfdb_float_ops AS
     OPERATOR 1 < (DOUBLE PRECISION, DOUBLE PRECISION),
     OPERATOR 2 <= (DOUBLE PRECISION, DOUBLE PRECISION),
@@ -83,18 +83,18 @@ use std::ptr;
     OPERATOR 4 >= (DOUBLE PRECISION, DOUBLE PRECISION),
     OPERATOR 5 > (DOUBLE PRECISION, DOUBLE PRECISION),
     OPERATOR 6 != (DOUBLE PRECISION, DOUBLE PRECISION);
-    
+
     -- Operator class for UUID type
-    CREATE OPERATOR FAMILY pgfdb_uuid_ops USING pgfdb_idx;
-    
-    CREATE OPERATOR CLASS pgfdb_idx_uuid
-    DEFAULT FOR TYPE UUID USING pgfdb_idx 
+    CREATE OPERATOR FAMILY pgfdb_uuid_ops USING pgfdb;
+
+    CREATE OPERATOR CLASS pgfdb_uuid
+    DEFAULT FOR TYPE UUID USING pgfdb
     FAMILY pgfdb_uuid_ops AS
     OPERATOR 3 = (UUID, UUID),
     OPERATOR 6 != (UUID, UUID);
     
     -- Add cross-type operators to integer family
-    ALTER OPERATOR FAMILY pgfdb_integer_ops USING pgfdb_idx ADD
+    ALTER OPERATOR FAMILY pgfdb_integer_ops USING pgfdb ADD
         -- INTEGER to BIGINT comparisons
         OPERATOR 1 < (INTEGER, BIGINT),
         OPERATOR 2 <= (INTEGER, BIGINT),
@@ -102,7 +102,7 @@ use std::ptr;
         OPERATOR 4 >= (INTEGER, BIGINT),
         OPERATOR 5 > (INTEGER, BIGINT),
         OPERATOR 6 != (INTEGER, BIGINT),
-        
+
         -- BIGINT to INTEGER comparisons
         OPERATOR 1 < (BIGINT, INTEGER),
         OPERATOR 2 <= (BIGINT, INTEGER),
@@ -110,7 +110,7 @@ use std::ptr;
         OPERATOR 4 >= (BIGINT, INTEGER),
         OPERATOR 5 > (BIGINT, INTEGER),
         OPERATOR 6 != (BIGINT, INTEGER),
-        
+
         -- INTEGER to SMALLINT comparisons
         OPERATOR 1 < (INTEGER, SMALLINT),
         OPERATOR 2 <= (INTEGER, SMALLINT),
@@ -118,7 +118,7 @@ use std::ptr;
         OPERATOR 4 >= (INTEGER, SMALLINT),
         OPERATOR 5 > (INTEGER, SMALLINT),
         OPERATOR 6 != (INTEGER, SMALLINT),
-        
+
         -- SMALLINT to INTEGER comparisons
         OPERATOR 1 < (SMALLINT, INTEGER),
         OPERATOR 2 <= (SMALLINT, INTEGER),
@@ -126,7 +126,7 @@ use std::ptr;
         OPERATOR 4 >= (SMALLINT, INTEGER),
         OPERATOR 5 > (SMALLINT, INTEGER),
         OPERATOR 6 != (SMALLINT, INTEGER),
-        
+
         -- BIGINT to SMALLINT comparisons
         OPERATOR 1 < (BIGINT, SMALLINT),
         OPERATOR 2 <= (BIGINT, SMALLINT),
@@ -134,7 +134,7 @@ use std::ptr;
         OPERATOR 4 >= (BIGINT, SMALLINT),
         OPERATOR 5 > (BIGINT, SMALLINT),
         OPERATOR 6 != (BIGINT, SMALLINT),
-        
+
         -- SMALLINT to BIGINT comparisons
         OPERATOR 1 < (SMALLINT, BIGINT),
         OPERATOR 2 <= (SMALLINT, BIGINT),
@@ -142,9 +142,9 @@ use std::ptr;
         OPERATOR 4 >= (SMALLINT, BIGINT),
         OPERATOR 5 > (SMALLINT, BIGINT),
         OPERATOR 6 != (SMALLINT, BIGINT);
-    
+
     -- Add cross-type operators to float family
-    ALTER OPERATOR FAMILY pgfdb_float_ops USING pgfdb_idx ADD
+    ALTER OPERATOR FAMILY pgfdb_float_ops USING pgfdb ADD
         -- REAL to DOUBLE PRECISION comparisons
         OPERATOR 1 < (REAL, DOUBLE PRECISION),
         OPERATOR 2 <= (REAL, DOUBLE PRECISION),
@@ -152,7 +152,7 @@ use std::ptr;
         OPERATOR 4 >= (REAL, DOUBLE PRECISION),
         OPERATOR 5 > (REAL, DOUBLE PRECISION),
         OPERATOR 6 != (REAL, DOUBLE PRECISION),
-        
+
         -- DOUBLE PRECISION to REAL comparisons
         OPERATOR 1 < (DOUBLE PRECISION, REAL),
         OPERATOR 2 <= (DOUBLE PRECISION, REAL),

@@ -37,7 +37,7 @@ use crate::{errors::FdbErrorExt, subspace};
     LANGUAGE C STRICT;
 
     -- Create the corresponding table access method from the just-registered TAM handler
-    CREATE ACCESS METHOD pgfdb TYPE TABLE HANDLER pgfdb_tam_handler;
+    CREATE ACCESS METHOD pgfdb_table TYPE TABLE HANDLER pgfdb_tam_handler;
     ")]
 pub fn pgfdb_tam_handler() -> TableAmHandler {
     TableAmHandler
