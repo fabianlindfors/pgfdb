@@ -162,13 +162,18 @@ unsafe extern "C-unwind" fn scan_end(scan: TableScanDesc) {
 
 #[pg_guard]
 unsafe extern "C-unwind" fn rescan(
-    _scan: TableScanDesc,
-    _key: *mut ScanKeyData,
+    scan: TableScanDesc,
+    key: *mut ScanKeyData,
     _set_params: bool,
     _allow_strat: bool,
     _allow_sync: bool,
     _allow_pagemode: bool,
 ) {
+    log!("TAM: Rescan");
+    let fscan = (scan as *mut scan::FdbScanDesc).as_mut().unwrap();
+
+    // Reinitialize the scan with the new key (if provided)
+    fscan.reinit(key);
 }
 
 #[pg_guard]

@@ -642,6 +642,171 @@ mod tests {
             explain.0.to_string()
         );
     }
+
+    #[pg_test]
+    fn join_with_table_scans() {
+        // Create two tables with pgfdb storage
+        Spi::run("CREATE TABLE orders (id INTEGER PRIMARY KEY, customer_id INTEGER) USING pgfdb")
+            .unwrap();
+        Spi::run("CREATE TABLE customers (id INTEGER PRIMARY KEY, name TEXT) USING pgfdb").unwrap();
+
+        // Insert test data
+        Spi::run(
+            "INSERT INTO customers (id, name) VALUES (1, 'Alice'), (2, 'Bob'), (3, 'Charlie')",
+        )
+        .unwrap();
+        Spi::run(
+            "INSERT INTO orders (id, customer_id) VALUES (101, 1), (102, 1), (103, 2), (104, NULL)",
+        )
+        .unwrap();
+
+        // Test inner join
+        let count: Option<i64> = Spi::get_one(
+            "SELECT COUNT(*) FROM orders o INNER JOIN customers c ON o.customer_id = c.id",
+        )
+        .unwrap();
+        assert_eq!(Some(3), count, "Inner join should return 3 rows");
+
+        // Test left join
+        let count: Option<i64> = Spi::get_one(
+            "SELECT COUNT(*) FROM orders o LEFT JOIN customers c ON o.customer_id = c.id",
+        )
+        .unwrap();
+        assert_eq!(
+            Some(4),
+            count,
+            "Left join should return 4 rows including NULL match"
+        );
+
+        // Test right join
+        let count: Option<i64> = Spi::get_one(
+            "SELECT COUNT(*) FROM orders o RIGHT JOIN customers c ON o.customer_id = c.id",
+        )
+        .unwrap();
+        assert_eq!(
+            Some(4),
+            count,
+            "Right join should return 4 rows including unmatched customer"
+        );
+
+        // Test join with additional filter
+        let count: Option<i64> = Spi::get_one(
+            "SELECT COUNT(*) FROM orders o JOIN customers c ON o.customer_id = c.id WHERE c.name = 'Alice'"
+        ).unwrap();
+        assert_eq!(Some(2), count, "Join with filter should return 2 rows");
+    }
+
+    #[pg_test]
+    fn join_with_indexed_column() {
+        // Create tables and add an index on the join column
+        Spi::run("CREATE TABLE products (id INTEGER PRIMARY KEY, category_id INTEGER) USING pgfdb")
+            .unwrap();
+        Spi::run("CREATE TABLE categories (id INTEGER PRIMARY KEY, name TEXT) USING pgfdb")
+            .unwrap();
+        Spi::run("CREATE INDEX products_category_idx ON products USING pgfdb_idx(category_id)")
+            .unwrap();
+
+        // Insert test data
+        Spi::run("INSERT INTO categories (id, name) VALUES (1, 'Electronics'), (2, 'Books'), (3, 'Clothing')").unwrap();
+        Spi::run("INSERT INTO products (id, category_id) VALUES (1, 1), (2, 1), (3, 2), (4, 2), (5, 3), (6, NULL)").unwrap();
+
+        // Disable sequential scans to force index use
+        Spi::run("SET enable_seqscan=0").unwrap();
+
+        // Verify index is used for join
+        let explain = Spi::explain(
+            "SELECT p.id, c.name FROM products p JOIN categories c ON p.category_id = c.id",
+        )
+        .unwrap();
+        assert!(
+            format!("{:?}", explain).contains("Index Name"),
+            "expected query plan to use index: {:?}",
+            explain.0.to_string()
+        );
+
+        // Test join with the index
+        let count: Option<i64> = Spi::get_one(
+            "SELECT COUNT(*) FROM products p JOIN categories c ON p.category_id = c.id",
+        )
+        .unwrap();
+        assert_eq!(
+            Some(5),
+            count,
+            "Join should return 5 rows with indexed join column"
+        );
+
+        // Test join with filter on indexed column
+        let count: Option<i64> = Spi::get_one(
+            "SELECT COUNT(*) FROM products p JOIN categories c ON p.category_id = c.id WHERE p.category_id = 1"
+        ).unwrap();
+        assert_eq!(Some(2), count, "Join with filter should return 2 rows");
+    }
+
+    #[pg_test]
+    fn join_with_multiple_conditions() {
+        Spi::run("CREATE TABLE employees (id INTEGER PRIMARY KEY, dept_id INTEGER, manager_id INTEGER) USING pgfdb").unwrap();
+        Spi::run("CREATE TABLE departments (id INTEGER PRIMARY KEY, location TEXT) USING pgfdb")
+            .unwrap();
+
+        Spi::run("INSERT INTO departments (id, location) VALUES (1, 'New York'), (2, 'Boston'), (3, 'San Francisco')").unwrap();
+        Spi::run(
+            "INSERT INTO employees (id, dept_id, manager_id) VALUES
+            (1, 1, NULL), (2, 1, 1), (3, 1, 1),
+            (4, 2, NULL), (5, 2, 4), (6, 2, 4),
+            (7, 3, NULL), (8, 3, 7), (9, NULL, NULL)",
+        )
+        .unwrap();
+
+        let cases = &[
+            // Multiple joins
+            (
+                5,
+                "SELECT COUNT(*) FROM employees e
+                JOIN departments d ON e.dept_id = d.id
+                JOIN employees m ON e.manager_id = m.id",
+            ),
+            // Join with additional where clause
+            (
+                3,
+                "SELECT COUNT(*) FROM employees e
+                JOIN departments d ON e.dept_id = d.id
+                WHERE d.location = 'New York'",
+            ),
+            // Self-join
+            (
+                2,
+                "SELECT COUNT(*) FROM employees e1
+                JOIN employees e2 ON e1.manager_id = e2.id
+                WHERE e2.dept_id = 1",
+            ),
+        ];
+
+        // Run test cases without indices
+        for (expected, query) in cases {
+            let result: Option<i64> = Spi::get_one(query).unwrap();
+            assert_eq!(Some(*expected), result);
+        }
+
+        // Add indices and run test cases with them
+        Spi::run("CREATE INDEX emp_dept_idx ON employees USING pgfdb_idx(dept_id)").unwrap();
+        Spi::run("CREATE INDEX emp_manager_idx ON employees USING pgfdb_idx(manager_id)").unwrap();
+
+        // Disable sequential scans to force index use
+        Spi::run("SET enable_seqscan=0").unwrap();
+
+        for (expected, query) in cases {
+            // Verify index is used for join
+            let explain = Spi::explain(query).unwrap();
+            assert!(
+                format!("{:?}", explain).contains("Index Name"),
+                "expected query plan to use index: {:?}",
+                explain.0.to_string()
+            );
+
+            let result: Option<i64> = Spi::get_one(query).unwrap();
+            assert_eq!(Some(*expected), result);
+        }
+    }
 }
 
 /// This module is required by `cargo pgrx test` invocations.
