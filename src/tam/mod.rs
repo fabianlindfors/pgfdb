@@ -80,8 +80,8 @@ static mut FDB_TABLE_AM_ROUTINE: TableAmRoutine = TableAmRoutine {
     scan_end: Some(scan_end),
     scan_rescan: Some(rescan),
     scan_getnextslot: Some(scan_get_next_slot),
-    scan_set_tidrange: Some(scan_set_tidrange),
-    scan_getnextslot_tidrange: Some(scan_get_next_slot_tidrange),
+    scan_set_tidrange: None,
+    scan_getnextslot_tidrange: None,
 
     parallelscan_estimate: Some(parallelscan_estimate),
     parallelscan_initialize: Some(parallelscan_initialize),
@@ -195,25 +195,6 @@ unsafe extern "C-unwind" fn scan_get_next_slot(
     tuple.load_into_tts(slot.as_mut().unwrap());
 
     true
-}
-
-#[pg_guard]
-unsafe extern "C-unwind" fn scan_set_tidrange(
-    _scan: TableScanDesc,
-    _mintid: ItemPointer,
-    _maxtid: ItemPointer,
-) {
-    log!("TAM: Scan set TID range");
-}
-
-#[pg_guard]
-unsafe extern "C-unwind" fn scan_get_next_slot_tidrange(
-    _scan: TableScanDesc,
-    _direction: ScanDirection::Type,
-    _slot: *mut TupleTableSlot,
-) -> bool {
-    log!("TAM: Scan get next slot TID range");
-    false
 }
 
 #[pg_guard]
