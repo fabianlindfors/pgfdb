@@ -5,8 +5,7 @@
 Build Docker image and pushing to ghcr.io:
 
 ```sh
-docker build -t pgfdb .
-docker build --platform linux/amd64,linux/arm64 -t ghcr.io/fabianlindfors/pgfdb:0.0.1 -t ghcr.io/fabianlindfors/pgfdb:latest --push .
+docker build --platform linux/amd64,linux/arm64 -t ghcr.io/fabianlindfors/pgfdb:0.0.1 -t ghcr.io/fabianlindfors/pgfdb:latest --annotation "org.opencontainers.image.source=https://github.com/fabianlindfors/pgfdb" --push .
 ```
 
 Start Docker container:

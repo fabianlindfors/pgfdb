@@ -87,8 +87,6 @@ RUN echo "CREATE EXTENSION pgfdb; ALTER SYSTEM SET default_table_access_method =
 # Clear out the default data written by Postgres so that a fresh database is created when the container starts
 RUN rm -rf /var/lib/postgresql/data
 
-LABEL org.opencontainers.image.source=https://github.com/fabianlindfors/pgfdb
-
 # Expose the PostgreSQL port
 EXPOSE 5432
 
