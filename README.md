@@ -30,10 +30,10 @@ Once we have FoundationDB running, we can start up pgfdb and connect to it. The 
 
 ```sh
 # On Linux
-docker run --name pgfdb --net=host -v /etc/foundationdb/fdb.cluster:/etc/foundationdb/fdb.cluster -e POSTGRES_PASSWORD=postgres fabianlindfors/pgfdb
+docker run --name pgfdb --net=host -v /etc/foundationdb/fdb.cluster:/etc/foundationdb/fdb.cluster -e POSTGRES_PASSWORD=postgres ghcr.io/fabianlindfors/pgfdb
 
 # On Mac
-docker run --name pgfdb --net=host -v /usr/local/etc/foundationdb/fdb.cluster:/etc/foundationdb/fdb.cluster -e POSTGRES_PASSWORD=postgres fabianlindfors/pgfdb
+docker run --name pgfdb --net=host -v /usr/local/etc/foundationdb/fdb.cluster:/etc/foundationdb/fdb.cluster -e POSTGRES_PASSWORD=postgres ghcr.io/fabianlindfors/pgfdb
 # => ...
 # => ... database system is ready to accept connections
 ```
@@ -155,7 +155,7 @@ pgfdb is an experimental project and is not ready for production usage. It's lik
 
 - DDL changes are not yet persisted to FoundationDB meaning you won't be able to access your database from different Postgres instances, and if you start a fresh Postgres instance, your database schema will not carry over. This will be implemented eventually of course as the end goal is to have Postgres run as a stateless layer on top of FoundationDB that can be scaled out horizontally.
 - Cost estimation have not yet been integrated meaning the query planner is unlikely to make use of any indexes you add. For testing, you can use `SET enable_seqscan=0` to force index usage.
-- FoundationDB has a [5 second limit](https://apple.github.io/foundationdb/anti-features.html#long-running-read-write-transactions) on transactions which carries over to apply to Postgres transactions with pgfdb. This means pgfdb, just like FoundatioDB, is best fit for OLTP workloads.
+- FoundationDB has a [5 second limit](https://apple.github.io/foundationdb/anti-features.html#long-running-read-write-transactions) on transactions which carries over to apply to Postgres transactions with pgfdb. This means pgfdb, just like FoundationDB, is best fit for OLTP workloads.
 - FoundationDB is fast but pgfdb doesn't make full use of it yet, so performance is likely to not be fully representative for what can actually be achieved with FoundationDB. Index scans for example are known to be slow because pgfdb performs sequential reads, which will be fixed soon.
 - Primary keys are not yet supported as pgfdb relies on custom index access methods and those can not yet be used for primary keys. There is [ongoing work](https://www.postgresql.org/message-id/flat/E72EAA49-354D-4C2E-8EB9-255197F55330%40enterprisedb.com) to fix this which might land in Postgres 18.
 - All data types should be supported on tables but only a limited set can be used for indices so far. Wider support is coming!
