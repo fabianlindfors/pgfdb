@@ -18,7 +18,7 @@ mod utils;
 
 #[pg_guard]
 pub extern "C-unwind" fn _PG_init() {
-    env::set_var("RUST_BACKTRACE", "1");
+    unsafe { env::set_var("RUST_BACKTRACE", "1") };
 
     fdb::init();
 
@@ -33,7 +33,7 @@ pub extern "C-unwind" fn _PG_init() {
 #[cfg(any(test, feature = "pg_test"))]
 #[pg_schema]
 mod tests {
-    use pgrx::{prelude::*, Uuid};
+    use pgrx::{Uuid, prelude::*};
 
     #[pg_test]
     fn create_table() {
