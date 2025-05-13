@@ -16,44 +16,47 @@ pub unsafe extern "C-unwind" fn ambuild(
     index_relation: Relation,
     index_info: *mut IndexInfo,
 ) -> *mut IndexBuildResult {
-    log!("IAM: Build index");
+    unsafe {
+        log!("IAM: Build index");
 
-    let mut num_rows = 0;
-    let index_oid = (*index_relation).rd_id;
-    let table_oid = (*heap_relation).rd_id;
-    let table_subspace = crate::subspace::table(table_oid);
+        let mut num_rows = 0;
+        let index_oid = (*index_relation).rd_id;
+        let table_oid = (*heap_relation).rd_id;
+        let table_subspace = crate::subspace::table(table_oid);
 
-    let txn = crate::transaction::get_transaction();
-    let range_option = RangeOption::from(table_subspace.range());
+        let txn = crate::transaction::get_transaction();
+        let range_option = RangeOption::from(table_subspace.range());
 
-    // Create a slot for the heap tuple
-    let heap_tuple_desc = (*heap_relation).rd_att;
-    let heap_slot =
-        pgrx::pg_sys::MakeSingleTupleTableSlot(heap_tuple_desc, &pgrx::pg_sys::TTSOpsVirtual);
+        // Create a slot for the heap tuple
+        let heap_tuple_desc = (*heap_relation).rd_att;
+        let heap_slot =
+            pgrx::pg_sys::MakeSingleTupleTableSlot(heap_tuple_desc, &pgrx::pg_sys::TTSOpsVirtual);
 
-    let mut stream = txn.get_ranges_keyvalues(range_option, false);
-    while let Some(item) = stream.next().block_on() {
-        let value = item.unwrap_or_pg_error();
-        let tuple = crate::coding::Tuple::deserialize(value.value());
-        let id = tuple.id;
+        let mut stream = txn.get_ranges_keyvalues(range_option, false);
+        while let Some(item) = stream.next().block_on() {
+            let value = item.unwrap_or_pg_error();
+            let tuple = crate::coding::Tuple::deserialize(value.value());
+            let id = tuple.id;
 
-        // Load the tuple into the heap slot
-        tuple.load_into_tts(heap_slot.as_mut().unwrap());
+            // Load the tuple into the heap slot
+            tuple.load_into_tts(heap_slot.as_mut().unwrap());
 
-        // Build and set the index key
-        let key = build_key_from_table_tuple(index_oid, id, index_relation, heap_slot, index_info);
-        txn.set(&key, &[]);
+            // Build and set the index key
+            let key =
+                build_key_from_table_tuple(index_oid, id, index_relation, heap_slot, index_info);
+            txn.set(&key, &[]);
 
-        num_rows += 1;
+            num_rows += 1;
+        }
+
+        // Free the heap slot
+        pgrx::pg_sys::ExecDropSingleTupleTableSlot(heap_slot);
+
+        let mut build_result = PgBox::<IndexBuildResult>::alloc();
+        build_result.heap_tuples = num_rows.into();
+        build_result.index_tuples = num_rows.into();
+        build_result.into_pg()
     }
-
-    // Free the heap slot
-    pgrx::pg_sys::ExecDropSingleTupleTableSlot(heap_slot);
-
-    let mut build_result = PgBox::<IndexBuildResult>::alloc();
-    build_result.heap_tuples = num_rows.into();
-    build_result.index_tuples = num_rows.into();
-    build_result.into_pg()
 }
 
 pub unsafe extern "C-unwind" fn ambuildempty(_heap_relation: Relation) {
@@ -71,38 +74,45 @@ pub unsafe extern "C-unwind" fn aminsert(
     _index_unchanged: bool,
     _index_info: *mut IndexInfo,
 ) -> bool {
-    log!("IAM: Insert into index");
+    unsafe {
+        log!("IAM: Insert into index");
 
-    // Get ID from TID
-    let id = unsafe { pgrx::itemptr::item_pointer_get_block_number_no_check(*tid) };
+        // Get ID from TID
+        let id = pgrx::itemptr::item_pointer_get_block_number_no_check(*tid);
 
-    // Get the number of attributes in the index
-    let index_tuple_desc = unsafe { (*index_relation).rd_att };
-    let natts = unsafe { (*index_tuple_desc).natts as usize };
-    let index_oid = unsafe { (*index_relation).rd_id };
-    let attrs = unsafe { (*index_tuple_desc).attrs.as_slice(natts) };
+        // Get the number of attributes in the index
+        let index_tuple_desc = (*index_relation).rd_att;
+        let natts = (*index_tuple_desc).natts as usize;
+        let index_oid = (*index_relation).rd_id;
+        let attrs = (*index_tuple_desc).attrs.as_slice(natts);
 
-    let txn = crate::transaction::get_transaction();
+        let txn = crate::transaction::get_transaction();
 
-    // If this was an update, we need to clear any existing index key
-    // We directly use build_key_from_table_tuple like in tuple_delete
-    // TODO: It might be dangerous to rely on the tuple cache here
-    if let Some((_, existing_slot)) = crate::tuple_cache::get_with_id(id) {
-        // Build and clear the index key using existing slot
-        let index_info = pg_sys::BuildIndexInfo(index_relation);
-        let key =
-            build_key_from_table_tuple(index_oid, id, index_relation, existing_slot, index_info);
-        txn.clear(&key);
+        // If this was an update, we need to clear any existing index key
+        // We directly use build_key_from_table_tuple like in tuple_delete
+        // TODO: It might be dangerous to rely on the tuple cache here
+        if let Some((_, existing_slot)) = crate::tuple_cache::get_with_id(id) {
+            // Build and clear the index key using existing slot
+            let index_info = pg_sys::BuildIndexInfo(index_relation);
+            let key = build_key_from_table_tuple(
+                index_oid,
+                id,
+                index_relation,
+                existing_slot,
+                index_info,
+            );
+            txn.clear(&key);
+        }
+
+        // Insert a new key for the indexed values which points back to the row being indexed
+        let values = from_raw_parts_mut(raw_values, natts);
+        let isnull = from_raw_parts_mut(raw_isnull, natts);
+
+        let key = build_key_from_index_values(index_oid, id, natts, attrs, values, isnull);
+        txn.set(&key, &[]);
+
+        true
     }
-
-    // Insert a new key for the indexed values which points back to the row being indexed
-    let values = from_raw_parts_mut(raw_values, natts);
-    let isnull = from_raw_parts_mut(raw_isnull, natts);
-
-    let key = build_key_from_index_values(index_oid, id, natts, attrs, values, isnull);
-    txn.set(&key, &[]);
-
-    true
 }
 
 pub fn build_key_from_table_tuple(

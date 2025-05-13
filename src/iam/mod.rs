@@ -2,7 +2,7 @@ pub(crate) mod build;
 mod scan;
 mod utils;
 
-use pg_sys::{bytea, Datum, IndexAmRoutine, InvalidOid};
+use pg_sys::{Datum, IndexAmRoutine, InvalidOid, bytea};
 use pgrx::callconv::BoxRet;
 use pgrx::prelude::*;
 use pgrx_sql_entity_graph::metadata::{
@@ -180,67 +180,69 @@ unsafe impl BoxRet for IndexAmHandler {
         self,
         fcinfo: &mut pgrx::callconv::FcInfo<'fcx>,
     ) -> pgrx::datum::Datum<'fcx> {
-        // An IAM must be returned as a palloced struct, as opposed to a TAM which can be statically allocated
-        let mut index_am_routine =
-            unsafe { PgBox::<IndexAmRoutine>::alloc_node(pgrx::pg_sys::NodeTag::T_IndexAmRoutine) };
+        unsafe {
+            // An IAM must be returned as a palloced struct, as opposed to a TAM which can be statically allocated
+            let mut index_am_routine =
+                PgBox::<IndexAmRoutine>::alloc_node(pgrx::pg_sys::NodeTag::T_IndexAmRoutine);
 
-        index_am_routine.ambuild = Some(build::ambuild);
-        index_am_routine.ambuildempty = Some(build::ambuildempty);
-        index_am_routine.aminsert = Some(build::aminsert);
-        index_am_routine.aminsertcleanup = None; // Not needed
-        index_am_routine.ambulkdelete = None; // Optional - for bulk deletes
-        index_am_routine.amvacuumcleanup = None; // Optional - for VACUUM
-        index_am_routine.amcanreturn = None; // Optional - index-only scans
-        index_am_routine.amcostestimate = Some(scan::amcostestimate); // Optional - custom cost estimation
-        index_am_routine.amoptions = Some(amoptions);
-        index_am_routine.amproperty = None; // Optional - index properties
-        index_am_routine.ambuildphasename = None; // Optional - progress reporting
-        index_am_routine.amvalidate = None; // Optional - index validation
-        index_am_routine.amadjustmembers = None; // Optional - parallel scan
-        index_am_routine.ambeginscan = Some(scan::ambeginscan);
-        index_am_routine.amrescan = Some(scan::amrescan);
-        index_am_routine.amgettuple = Some(scan::amgettuple);
-        index_am_routine.amendscan = Some(scan::amendscan);
-        index_am_routine.ammarkpos = None; // Optional - mark/restore position
-        index_am_routine.amrestrpos = None; // Optional - mark/restore position
+            index_am_routine.ambuild = Some(build::ambuild);
+            index_am_routine.ambuildempty = Some(build::ambuildempty);
+            index_am_routine.aminsert = Some(build::aminsert);
+            index_am_routine.aminsertcleanup = None; // Not needed
+            index_am_routine.ambulkdelete = None; // Optional - for bulk deletes
+            index_am_routine.amvacuumcleanup = None; // Optional - for VACUUM
+            index_am_routine.amcanreturn = None; // Optional - index-only scans
+            index_am_routine.amcostestimate = Some(scan::amcostestimate); // Optional - custom cost estimation
+            index_am_routine.amoptions = Some(amoptions);
+            index_am_routine.amproperty = None; // Optional - index properties
+            index_am_routine.ambuildphasename = None; // Optional - progress reporting
+            index_am_routine.amvalidate = None; // Optional - index validation
+            index_am_routine.amadjustmembers = None; // Optional - parallel scan
+            index_am_routine.ambeginscan = Some(scan::ambeginscan);
+            index_am_routine.amrescan = Some(scan::amrescan);
+            index_am_routine.amgettuple = Some(scan::amgettuple);
+            index_am_routine.amendscan = Some(scan::amendscan);
+            index_am_routine.ammarkpos = None; // Optional - mark/restore position
+            index_am_routine.amrestrpos = None; // Optional - mark/restore position
 
-        // Bitmap scans not supported
-        index_am_routine.amgetbitmap = None;
+            // Bitmap scans not supported
+            index_am_routine.amgetbitmap = None;
 
-        // Parallel scans not supported
-        index_am_routine.amestimateparallelscan = None;
-        index_am_routine.aminitparallelscan = None;
-        index_am_routine.amparallelrescan = None;
+            // Parallel scans not supported
+            index_am_routine.amestimateparallelscan = None;
+            index_am_routine.aminitparallelscan = None;
+            index_am_routine.amparallelrescan = None;
 
-        // Strategies:
-        // 3: =
-        // 4: <=
-        // 5: <
-        index_am_routine.amstrategies = 6;
+            // Strategies:
+            // 3: =
+            // 4: <=
+            // 5: <
+            index_am_routine.amstrategies = 6;
 
-        index_am_routine.amsupport = 0;
-        index_am_routine.amoptsprocnum = 0;
-        index_am_routine.amcanorder = true;
-        index_am_routine.amcanorderbyop = false;
-        index_am_routine.amcanbackward = true;
-        index_am_routine.amcanunique = true;
-        index_am_routine.amcanmulticol = true;
-        index_am_routine.amoptionalkey = false;
-        index_am_routine.amsearcharray = false;
-        index_am_routine.amsearchnulls = true;
-        index_am_routine.amstorage = false;
-        index_am_routine.amclusterable = false;
-        index_am_routine.ampredlocks = false;
-        index_am_routine.amcanparallel = false;
-        index_am_routine.amcanbuildparallel = false;
-        index_am_routine.amcaninclude = false;
-        index_am_routine.amusemaintenanceworkmem = false;
-        index_am_routine.amsummarizing = false;
-        index_am_routine.amparallelvacuumoptions = 0;
-        // Variable type of data stored in index
-        index_am_routine.amkeytype = InvalidOid;
+            index_am_routine.amsupport = 0;
+            index_am_routine.amoptsprocnum = 0;
+            index_am_routine.amcanorder = true;
+            index_am_routine.amcanorderbyop = false;
+            index_am_routine.amcanbackward = true;
+            index_am_routine.amcanunique = true;
+            index_am_routine.amcanmulticol = true;
+            index_am_routine.amoptionalkey = false;
+            index_am_routine.amsearcharray = false;
+            index_am_routine.amsearchnulls = true;
+            index_am_routine.amstorage = false;
+            index_am_routine.amclusterable = false;
+            index_am_routine.ampredlocks = false;
+            index_am_routine.amcanparallel = false;
+            index_am_routine.amcanbuildparallel = false;
+            index_am_routine.amcaninclude = false;
+            index_am_routine.amusemaintenanceworkmem = false;
+            index_am_routine.amsummarizing = false;
+            index_am_routine.amparallelvacuumoptions = 0;
+            // Variable type of data stored in index
+            index_am_routine.amkeytype = InvalidOid;
 
-        fcinfo.return_raw_datum(index_am_routine.into_datum().unwrap())
+            fcinfo.return_raw_datum(index_am_routine.into_datum().unwrap())
+        }
     }
 }
 

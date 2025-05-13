@@ -1,19 +1,18 @@
 use core::slice;
 use std::task::{Context, Poll, Waker};
 
-use foundationdb::tuple::{Element, Subspace};
 use foundationdb::KeySelector;
-use foundationdb::{future::FdbValue, tuple::unpack, FdbResult, RangeOption};
+use foundationdb::tuple::{Element, Subspace};
+use foundationdb::{FdbResult, RangeOption, future::FdbValue, tuple::unpack};
 use futures::stream::empty;
-use futures::{stream::BoxStream, FutureExt, StreamExt};
+use futures::{FutureExt, StreamExt, stream::BoxStream};
 use pg_sys::{
-    clauselist_selectivity, get_quals_from_indexclauses, Cost, IndexPath, IndexScanDesc,
-    IndexScanDescData, JoinType::JOIN_INNER, PlannerInfo, Relation, ScanDirection, ScanKey,
-    Selectivity,
+    Cost, IndexPath, IndexScanDesc, IndexScanDescData, JoinType::JOIN_INNER, PlannerInfo, Relation,
+    ScanDirection, ScanKey, Selectivity, clauselist_selectivity, get_quals_from_indexclauses,
 };
 use pgrx::itemptr::item_pointer_set_all;
 use pgrx::pg_sys::panic::ErrorReportable;
-use pgrx::pg_sys::{FormData_pg_attribute, ScanKeyData, SK_SEARCHNOTNULL, SK_SEARCHNULL};
+use pgrx::pg_sys::{FormData_pg_attribute, SK_SEARCHNOTNULL, SK_SEARCHNULL, ScanKeyData};
 use pgrx::prelude::*;
 
 use crate::errors::FdbErrorExt;
@@ -38,24 +37,26 @@ pub unsafe extern "C-unwind" fn amcostestimate(
     index_correlation: *mut f64,
     index_pages: *mut f64,
 ) {
-    log!("IAM: Calculate cost estimate");
+    unsafe {
+        log!("IAM: Calculate cost estimate");
 
-    *index_startup_cost = 0.0;
+        *index_startup_cost = 0.0;
 
-    *index_total_cost = 0.0;
+        *index_total_cost = 0.0;
 
-    *index_correlation = 0.0;
+        *index_correlation = 0.0;
 
-    *index_pages = 0.0;
+        *index_pages = 0.0;
 
-    let index_quals = get_quals_from_indexclauses((*path).indexclauses);
-    *index_selectivity = clauselist_selectivity(
-        root,
-        index_quals,
-        (*(*(*path).indexinfo).rel).relid as i32,
-        JOIN_INNER,
-        std::ptr::null_mut(),
-    );
+        let index_quals = get_quals_from_indexclauses((*path).indexclauses);
+        *index_selectivity = clauselist_selectivity(
+            root,
+            index_quals,
+            (*(*(*path).indexinfo).rel).relid as i32,
+            JOIN_INNER,
+            std::ptr::null_mut(),
+        );
+    }
 }
 
 // Begin an index scan
@@ -64,30 +65,30 @@ pub unsafe extern "C-unwind" fn ambeginscan(
     nkeys: i32,
     norderbys: i32,
 ) -> IndexScanDesc {
-    log!("IAM: Begin scan");
-
-    let mut scan = PgBox::<FdbIndexScan>::alloc();
-
-    // Initialize the base IndexScanDescData
-    scan.base.indexRelation = index_relation;
-    scan.base.numberOfKeys = nkeys;
-    scan.base.numberOfOrderBys = norderbys;
-    scan.base.keyData = std::ptr::null_mut();
-    scan.base.orderByData = std::ptr::null_mut();
-    scan.base.xs_snapshot = std::ptr::null_mut();
-    scan.base.xs_want_itup = false;
-    scan.base.xs_temp_snap = false;
-
-    // Create an empty stream initially - will be populated in rescan
-    let empty_stream = futures::stream::empty().boxed();
-
-    // We must use ptr::write to avoid dropping uninitialized memory
     unsafe {
+        log!("IAM: Begin scan");
+
+        let mut scan = PgBox::<FdbIndexScan>::alloc();
+
+        // Initialize the base IndexScanDescData
+        scan.base.indexRelation = index_relation;
+        scan.base.numberOfKeys = nkeys;
+        scan.base.numberOfOrderBys = norderbys;
+        scan.base.keyData = std::ptr::null_mut();
+        scan.base.orderByData = std::ptr::null_mut();
+        scan.base.xs_snapshot = std::ptr::null_mut();
+        scan.base.xs_want_itup = false;
+        scan.base.xs_temp_snap = false;
+
+        // Create an empty stream initially - will be populated in rescan
+        let empty_stream = futures::stream::empty().boxed();
+
+        // We must use ptr::write to avoid dropping uninitialized memory
         let scan_pointer = scan.as_ptr();
         std::ptr::write(&mut (*scan_pointer).values, empty_stream);
-    }
 
-    scan.into_pg() as IndexScanDesc
+        scan.into_pg() as IndexScanDesc
+    }
 }
 
 // Fetch next tuple from scan
@@ -161,39 +162,41 @@ pub unsafe extern "C-unwind" fn amrescan(
     _orderbys: ScanKey,
     norderbys: ::std::os::raw::c_int,
 ) {
-    log!(
-        "IAM: Re-scan with {} keys and {} orderbys",
-        nkeys,
-        norderbys
-    );
+    unsafe {
+        log!(
+            "IAM: Re-scan with {} keys and {} orderbys",
+            nkeys,
+            norderbys
+        );
 
-    let index_relation = (*scan).indexRelation;
-    let index_tuple_desc = (*index_relation).rd_att;
-    let attrs = (*index_tuple_desc)
-        .attrs
-        .as_slice((*index_tuple_desc).natts as usize);
-    let scan_keys = slice::from_raw_parts(keys, nkeys as usize);
+        let index_relation = (*scan).indexRelation;
+        let index_tuple_desc = (*index_relation).rd_att;
+        let attrs = (*index_tuple_desc)
+            .attrs
+            .as_slice((*index_tuple_desc).natts as usize);
+        let scan_keys = slice::from_raw_parts(keys, nkeys as usize);
 
-    // Construct a range option representing what part of the index we need to iterate over based on the scan keys
-    let index_oid = (*index_relation).rd_id;
-    let index_subspace = crate::subspace::index(index_oid);
-    let range_options = range_options_for_scan(index_subspace, scan_keys, attrs);
+        // Construct a range option representing what part of the index we need to iterate over based on the scan keys
+        let index_oid = (*index_relation).rd_id;
+        let index_subspace = crate::subspace::index(index_oid);
+        let range_options = range_options_for_scan(index_subspace, scan_keys, attrs);
 
-    // Create a stream of key-value pairs from FDB from all the range options chained together
-    let txn = crate::transaction::get_transaction();
-    let stream = range_options
-        .into_iter()
-        .fold(empty().boxed(), |stream, range_option| {
-            stream
-                .chain(txn.get_ranges_keyvalues(range_option, false))
-                .boxed()
-        });
+        // Create a stream of key-value pairs from FDB from all the range options chained together
+        let txn = crate::transaction::get_transaction();
+        let stream = range_options
+            .into_iter()
+            .fold(empty().boxed(), |stream, range_option| {
+                stream
+                    .chain(txn.get_ranges_keyvalues(range_option, false))
+                    .boxed()
+            });
 
-    // Replace the existing stream
-    // First, drop the old stream to avoid leaking resources
-    let fdb_scan = scan as *mut FdbIndexScan;
-    let old_stream = std::ptr::replace(&mut (*fdb_scan).values, stream);
-    drop(old_stream);
+        // Replace the existing stream
+        // First, drop the old stream to avoid leaking resources
+        let fdb_scan = scan as *mut FdbIndexScan;
+        let old_stream = std::ptr::replace(&mut (*fdb_scan).values, stream);
+        drop(old_stream);
+    }
 }
 
 fn range_options_for_scan<'a>(
@@ -213,7 +216,9 @@ fn range_options_for_scan<'a>(
     for head_scan_key in head {
         // Must use equality operator (we can probably support inequality as well by splitting into more ranges)
         if head_scan_key.sk_strategy != 3 {
-            panic!("IAM: Only equality operators are supported for multi-column index scans on non-final scan keys");
+            panic!(
+                "IAM: Only equality operators are supported for multi-column index scans on non-final scan keys"
+            );
         }
 
         let attr = attrs[head_scan_key.sk_attno as usize - 1];
