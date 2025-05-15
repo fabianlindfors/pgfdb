@@ -14,6 +14,7 @@ In short, pgfdb aims to upgrade Postgres with:
 - [Automatic replication](https://apple.github.io/foundationdb/features.html#replicated-storage) for durability and read performance. No need to configure read replicas or route requests in your client.
 - [Fault tolerance](https://apple.github.io/foundationdb/fault-tolerance.html) that handles node failures and availability zone outages without any intervention. No need to manually configure replication and failovers.
 - Simplified operations. No more VACUUM or complicated version upgrades. Native backups to object storage with point-in-time restore.
+- [Multitenancy](https://apple.github.io/foundationdb/tenants.html) which enables running many databases on a single FoundationDB cluster and scaling Postgres to zero when idle.
 - [High performance](https://apple.github.io/foundationdb/performance.html) that has been battle tested by companies like [Apple](https://arxiv.org/abs/1901.04452), [Snowflake](https://www.snowflake.com/en/blog/how-foundationdb-powers-snowflake-metadata-forward/) and [Deepseek](https://github.com/deepseek-ai/3FS).
 
 Keep reading if you want to try it out yourself! Also feel free to [reach out](mailto:fabian@flapplabs.se) if you are interested in chatting about pgfdb.
