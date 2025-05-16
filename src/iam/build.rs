@@ -35,7 +35,7 @@ pub unsafe extern "C-unwind" fn ambuild(
         let mut stream = txn.get_ranges_keyvalues(range_option, false);
         while let Some(item) = stream.next().block_on() {
             let value = item.unwrap_or_pg_error();
-            let tuple = crate::coding::Tuple::deserialize(value.value());
+            let mut tuple = crate::coding::Tuple::deserialize(value.value());
             let id = tuple.id;
 
             // Load the tuple into the heap slot
@@ -69,7 +69,7 @@ pub unsafe extern "C-unwind" fn aminsert(
     raw_values: *mut Datum,
     raw_isnull: *mut bool,
     tid: ItemPointer,
-    _heap_relation: Relation,
+    heap_relation: Relation,
     _check_unique: IndexUniqueCheck::Type,
     _index_unchanged: bool,
     _index_info: *mut IndexInfo,
@@ -91,17 +91,29 @@ pub unsafe extern "C-unwind" fn aminsert(
         // If this was an update, we need to clear any existing index key
         // We directly use build_key_from_table_tuple like in tuple_delete
         // TODO: It might be dangerous to rely on the tuple cache here
-        if let Some((_, existing_slot)) = crate::tuple_cache::get_with_id(id) {
+        if let Some(mut tuple) = crate::tuple_cache::get_with_id(id) {
+            let heap_tuple_desc = (*heap_relation).rd_att;
+            let heap_slot = pgrx::pg_sys::MakeSingleTupleTableSlot(
+                heap_tuple_desc,
+                &pgrx::pg_sys::TTSOpsVirtual,
+            );
+
+            //  Load the tuple into the heap slot
+            tuple.load_into_tts(heap_slot.as_mut().unwrap());
+
             // Build and clear the index key using existing slot
             let index_info = pg_sys::BuildIndexInfo(index_relation);
             let key = build_key_from_table_tuple(
                 index_oid,
-                id,
+                tuple.id,
                 index_relation,
-                existing_slot,
+                heap_slot,
                 index_info,
             );
             txn.clear(&key);
+
+            // Free the slot
+            pgrx::pg_sys::ExecDropSingleTupleTableSlot(heap_slot);
         }
 
         // Insert a new key for the indexed values which points back to the row being indexed

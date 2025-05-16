@@ -190,7 +190,7 @@ unsafe extern "C-unwind" fn scan_get_next_slot(
         let scan = (raw_scan as *mut scan::FdbScanDesc).as_mut().unwrap();
 
         // Load next value from the ongoing scan
-        let Some(tuple) = scan.next_value() else {
+        let Some(mut tuple) = scan.next_value() else {
             // No value means there are no more tuples in the scan
             return false;
         };
@@ -238,18 +238,30 @@ unsafe extern "C-unwind" fn index_fetch_tuple(
         log!("TAM: Fetch tuple, id = {:?}", (*tid).ip_blkid);
 
         let id = item_pointer_get_block_number_no_check(*tid);
+
         // Store the current ID in our custom field for potential future use
         (*fdb_scan).current_id = id;
 
-        let key = subspace::table((*(*scan).rel).rd_id).pack(&id);
+        // Look up the tuple in the tuple cache which the IAM's `amgettuple` should
+        // have already populated
+        let mut tuple = match crate::tuple_cache::get_with_id(id) {
+            Some(tuple) => tuple,
+            None => {
+                // Fall back if the tuple cache was not populated, this should never happen AFAIK
+                // but maybe there is some query plan which could trigger this. This is much slower though
+                // as it reads each row from the index scan one-by-one in a serial fashion, compared to making
+                // multiple parallel reads to FDB that the IAM takes care of.
+                let key = subspace::table((*(*scan).rel).rd_id).pack(&id);
 
-        let txn = crate::transaction::get_transaction();
-        let Some(value) = txn.get(&key, false).block_on().unwrap_or_pg_error() else {
-            return false;
+                let txn = crate::transaction::get_transaction();
+                let Some(value) = txn.get(&key, false).block_on().unwrap_or_pg_error() else {
+                    return false;
+                };
+
+                // Decode the value into our intermediate data structure
+                crate::coding::Tuple::deserialize(&value)
+            }
         };
-
-        // Decode the value into our intermediate data structure
-        let tuple = crate::coding::Tuple::deserialize(&value);
 
         // Store the decoded values on the TTS
         tuple.load_into_tts(slot.as_mut().unwrap());
@@ -352,7 +364,7 @@ unsafe extern "C-unwind" fn tuple_delete(
         // Get the tuple data before deleting it
         if let Some(value) = txn.get(&key, false).block_on().unwrap_or_pg_error() {
             // Decode the tuple
-            let tuple = crate::coding::Tuple::deserialize(&value);
+            let mut tuple = crate::coding::Tuple::deserialize(&value);
 
             // Create a tuple table slot for the heap tuple
             let tuple_desc = (*rel).rd_att;
@@ -633,10 +645,10 @@ unsafe extern "C-unwind" fn tuple_fetch_row_version(
             return false;
         };
 
-        let tuple = crate::coding::Tuple::deserialize(&data);
+        let mut tuple = crate::coding::Tuple::deserialize(&data);
         tuple.load_into_tts(slot.as_mut().unwrap());
 
-        crate::tuple_cache::populate(id, slot);
+        crate::tuple_cache::populate(tuple);
 
         true
     }

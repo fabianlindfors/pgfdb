@@ -1,11 +1,13 @@
 use core::slice;
-use std::task::{Context, Poll, Waker};
 
-use foundationdb::KeySelector;
+use foundationdb::future::{FdbSlice, FdbValues};
 use foundationdb::tuple::{Element, Subspace};
-use foundationdb::{FdbResult, RangeOption, future::FdbValue, tuple::unpack};
+use foundationdb::{FdbResult, RangeOption, tuple::unpack};
+use foundationdb::{KeySelector, Transaction};
+use futures::future::join_all;
 use futures::stream::empty;
 use futures::{FutureExt, StreamExt, stream::BoxStream};
+use futures::{Stream, TryFutureExt, TryStreamExt, stream};
 use pg_sys::{
     Cost, IndexPath, IndexScanDesc, IndexScanDescData, JoinType::JOIN_INNER, PlannerInfo, Relation,
     ScanDirection, ScanKey, Selectivity, clauselist_selectivity, get_quals_from_indexclauses,
@@ -14,16 +16,19 @@ use pgrx::itemptr::item_pointer_set_all;
 use pgrx::pg_sys::panic::ErrorReportable;
 use pgrx::pg_sys::{FormData_pg_attribute, SK_SEARCHNOTNULL, SK_SEARCHNULL, ScanKeyData};
 use pgrx::prelude::*;
+use pollster::FutureExt as _;
 
+use crate::coding::Tuple;
 use crate::errors::FdbErrorExt;
 use crate::iam::utils::encode_datum_for_index;
+use crate::tuple_cache;
 
 #[repr(C)]
 struct FdbIndexScan {
     // Must be first field to ensure proper casting
     base: IndexScanDescData,
     // Stream of values from FDB
-    values: BoxStream<'static, FdbResult<FdbValue>>,
+    values: BoxStream<'static, FdbResult<(u32, FdbSlice)>>,
 }
 
 // https://www.postgresql.org/docs/current/index-cost-estimation.html
@@ -108,38 +113,26 @@ pub unsafe extern "C-unwind" fn amgettuple(
     let fdb_scan = scan as *mut FdbIndexScan;
 
     // Get the next key-value pair from the stream
-    let mut next_fut = unsafe { (*fdb_scan).values.next() };
-    let mut ctx = Context::from_waker(Waker::noop());
-
-    // Poll the future until it's ready
-    let next = loop {
-        match next_fut.poll_unpin(&mut ctx) {
-            Poll::Ready(result) => {
-                break result;
-            }
-            Poll::Pending => std::thread::sleep(std::time::Duration::from_millis(1)),
-        }
-    };
+    let next = unsafe { (*fdb_scan).values.next() }.block_on();
 
     // If there's no more data, return false
     let Some(result) = next else {
         return false;
     };
 
-    let key_value = result.unwrap_or_pg_error();
+    let (id, value) = result.unwrap_or_pg_error();
 
-    // Unpack the key to get the tuple elements
-    let key_tuple_elements: Vec<Element> = unpack(key_value.key()).unwrap_or_report();
-
-    // The ID is the last element in the key tuple
-    let id = key_tuple_elements.last().unwrap().as_i64().unwrap() as u32;
+    // Our index scan doesn't just fetch the index row, it also fetches the corresponding table row.
+    // This is to avoid the TAM having to look up each table row one by one, which gets very slow for large
+    // index scans. Here we store the fetched table row in the tuple cache so that the TAM can use it in `index_fetch_tuple`.
+    let tuple = Tuple::deserialize(&value);
+    tuple_cache::populate(tuple);
 
     // Use a fixed offset of 1 (first item in the block)
     let offset_num = 1u16;
 
     unsafe {
         // Store back the ID to be looked up by the table access method
-        // TODO: Optimise this somehow so the TAM doesn't have to do serialised point lookups
         item_pointer_set_all(&mut (*fdb_scan).base.xs_heaptid, id, offset_num);
 
         // Recheck is probbaly not necessary but the NULL handling right now probably requires it
@@ -169,6 +162,8 @@ pub unsafe extern "C-unwind" fn amrescan(
             norderbys
         );
 
+        let fdb_scan = scan as *mut FdbIndexScan;
+
         let index_relation = (*scan).indexRelation;
         let index_tuple_desc = (*index_relation).rd_att;
         let attrs = (*index_tuple_desc)
@@ -181,22 +176,75 @@ pub unsafe extern "C-unwind" fn amrescan(
         let index_subspace = crate::subspace::index(index_oid);
         let range_options = range_options_for_scan(index_subspace, scan_keys, attrs);
 
+        let table_oid = (*(*scan).heapRelation).rd_id;
+
         // Create a stream of key-value pairs from FDB from all the range options chained together
         let txn = crate::transaction::get_transaction();
         let stream = range_options
             .into_iter()
             .fold(empty().boxed(), |stream, range_option| {
-                stream
-                    .chain(txn.get_ranges_keyvalues(range_option, false))
-                    .boxed()
+                let index_scan = txn
+                    .get_ranges(range_option, false)
+                    .map_ok(move |values| {
+                        index_values_to_table_lookups(
+                            txn,
+                            crate::subspace::table(table_oid),
+                            values,
+                        )
+                    })
+                    .try_flatten();
+
+                stream.chain(index_scan).boxed()
             });
 
         // Replace the existing stream
         // First, drop the old stream to avoid leaking resources
-        let fdb_scan = scan as *mut FdbIndexScan;
         let old_stream = std::ptr::replace(&mut (*fdb_scan).values, stream);
         drop(old_stream);
     }
+}
+
+// Takes a list of FDB values from an index scan and performs point lookups against the table for those rows.
+// The intent here is to schedule all those point lookups in parallel and then convert them into a stream of results
+// with the full table row. This makes for more efficient index scans, compared to just scanning the index and then
+// having the TAM look up each row one by one.
+//
+// This could likely be improved by using mapped ranges in FDB but currently they don't support Read Your Own Writes and
+// will fail hard if reading a value that was written in the same transaction. Maybe one could implement mapped ranges still
+// and fall back to the logic below if that error is encountered. Or alternatively, have some heuristic for chosing between
+// a mapped range or the logic below. Maybe as simple as if any write has been done in the transaction, don't use mapped ranges?
+fn index_values_to_table_lookups(
+    txn: &'static Transaction,
+    table_subspace: Subspace,
+    values: FdbValues,
+) -> impl Stream<Item = FdbResult<(u32, FdbSlice)>> {
+    let ids: Vec<u32> = values
+        .into_iter()
+        .map(|value| {
+            // Unpack the key to get the tuple elements
+            let key_tuple_elements: Vec<Element> = unpack(value.key()).unwrap_or_report();
+
+            // The ID is the last element in the key tuple
+            let id = key_tuple_elements.last().unwrap().as_i64().unwrap() as u32;
+
+            id
+        })
+        .collect();
+
+    let future = join_all(ids.iter().map(|id| {
+        let id = id.clone();
+        txn.get(&table_subspace.pack(&id), false)
+            .map_ok(move |result| result.map(|slice| (id, slice)))
+    }));
+
+    let nested_stream = stream::once(future.map(stream::iter));
+    nested_stream.flatten().filter_map(async |item| match item {
+        Ok(result) => match result {
+            Some(result) => Some(Ok(result)),
+            None => None,
+        },
+        Err(err) => Some(Err(err)),
+    })
 }
 
 fn range_options_for_scan<'a>(

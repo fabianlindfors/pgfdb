@@ -4,16 +4,16 @@ use pgrx::{
     ffi::c_char,
     itemptr::item_pointer_set_all,
     pg_sys::{
-        fmgr_info, getTypeBinaryInputInfo, getTypeBinaryOutputInfo, Datum, ExecClearTuple,
-        ExecStoreVirtualTuple, FmgrInfo, Oid, ReceiveFunctionCall, SendFunctionCall,
-        StringInfoData, TupleTableSlot,
+        Datum, ExecClearTuple, ExecStoreVirtualTuple, FmgrInfo, Oid, ReceiveFunctionCall,
+        SendFunctionCall, StringInfoData, TupleTableSlot, fmgr_info, getTypeBinaryInputInfo,
+        getTypeBinaryOutputInfo,
     },
     varlena_to_byte_slice,
 };
 use serde::{Deserialize, Serialize};
 
 // This struct can proabably be optimized by using zero-copy serde
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Tuple {
     pub id: u32,
     pub datums: Vec<Option<Vec<u8>>>,
@@ -104,7 +104,7 @@ impl Tuple {
         tuple
     }
 
-    pub fn load_into_tts(self, tts: &mut TupleTableSlot) {
+    pub fn load_into_tts(&mut self, tts: &mut TupleTableSlot) {
         // Ensure the decoded tuple has the same number of attributes as we expect
         let num_atts = unsafe { (*tts.tts_tupleDescriptor).natts as usize };
         assert_eq!(self.datums.len(), num_atts);
@@ -120,8 +120,8 @@ impl Tuple {
 
         // Store decoded values and nulls into TTS
         let attrs = unsafe { (*tts.tts_tupleDescriptor).attrs.as_slice(num_atts) };
-        for (i, maybe_encoded_datum) in self.datums.into_iter().enumerate() {
-            let Some(mut encoded_datum) = maybe_encoded_datum else {
+        for (i, maybe_encoded_datum) in self.datums.iter_mut().enumerate() {
+            let Some(encoded_datum) = maybe_encoded_datum else {
                 unsafe {
                     *tts.tts_isnull.add(i) = true;
                     *tts.tts_values.add(i) = Datum::null();
@@ -130,7 +130,7 @@ impl Tuple {
             };
 
             // Decode datum and store it on the TTS
-            let datum = decode_datum(&mut encoded_datum, attrs[i].atttypid);
+            let datum = decode_datum(encoded_datum, attrs[i].atttypid);
             unsafe {
                 *tts.tts_isnull.add(i) = false;
                 *tts.tts_values.add(i) = datum;
