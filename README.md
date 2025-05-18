@@ -44,7 +44,7 @@ You should see some output from Postgres starting up and we're now ready to use 
 One simple way to do this is to use `psql` on the container we just started:
 
 ```sh
-docker exec -it pgfb psql -h localhost -U postgres
+docker exec -it pgfdb psql -h localhost -U postgres
 # => psql (17.4 (Debian 17.4-1.pgdg120+2))
 # => Type "help" for help.
 #
